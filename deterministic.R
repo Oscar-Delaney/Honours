@@ -50,28 +50,33 @@ monod <- function(N,parms){
   return(mu*N/(N+k))
 }
 
-deplete <- function(dS,dR,alpha=params["S","alpha"]) {
-  return(-alpha*(max(0,dS)+max(0,dR)))
+deplete <- function(dS,dR1,dR2,dR12,alpha=params["S","alpha"]) {
+  return(-alpha*(max(0,dS)+max(0,dR1)+max(0,dR2)+max(0,dR12)))
 }
 
 # Define the differential equations for the model
 bacterial_growth <- function(t,populations,parms=params) {
   with(as.list(c(populations)), {
     S <- populations[1]
-    R <- populations[2]
-    N <- populations[3]
+    R1 <- populations[2]
+    R2 <- populations[3]
+    R12 <- populations[4]
+    N <- populations[5]
     dS <- S*(monod(N,params["S",c("mu","k")]) + antibiotics(A1=1,A2=0,params["S",1:7]) - mutation_rate)
-    dR <- R*(monod(N,params["R1",c("mu","k")]) + antibiotics(A1=1,A2=0,params["R1",1:7])) + S*mutation_rate
-    dN <- deplete(dS,dR)
-    return(list(c(dS, dR, dN)))
+    dR1 <- R1*(monod(N,params["R1",c("mu","k")]) + antibiotics(A1=1,A2=0,params["R1",1:7])) + S*mutation_rate
+    dR2 <- R2*(monod(N,params["R2",c("mu","k")]) + antibiotics(A1=1,A2=0,params["R2",1:7])) + S*mutation_rate
+    dR12 <- R12*(monod(N,params["R12",c("mu","k")]) + antibiotics(A1=1,A2=0,params["R12",1:7])) + (R1+R2)*mutation_rate
+    dN <- deplete(dS,dR1,dR2,dR12)
+    return(list(c(dS, dR1, dR2, dR12, dN)))
   })
 }
 
 # Example usage
 times <- seq(0,50,0.01)
-solution <- ode(y = c(S = 100, R = 10, N = 1000), times = times, func = bacterial_growth)
+solution <- ode(y = c(S = 100, R1 = 10, R2 = 10, R12 = 0, N = 100), times = times, func = bacterial_growth)
 plot(solution[, 1], solution[,2],type = "l", col = 1, main = "Bacterial growth over time", xlab = "Time", ylab = "Population size")
 lines(solution[, 1],solution[, 3], col = 2)
 lines(solution[, 1],solution[, 4], col = 3)
-legend("topright", legend = c("Susceptible", "Resistant", "Nutrient"), col = c(1, 2, 3), lty = 1)
-
+lines(solution[, 1],solution[, 5], col = 4)
+lines(solution[, 1],solution[, 6], col = 5)
+legend("topright", legend = c("Susceptible", "Resistant1", "Resistant2", "Resistant12", "Nutrient"), col = c(1, 2, 3, 4, 5), lty = 1)
