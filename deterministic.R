@@ -5,9 +5,7 @@ Phi = 0.2
 Zeta = 1
 Kappa = 1
 
-hill <- function(psi=Psi,A,phi=Phi,zeta=Zeta,kappa=Kappa) {
-  return(phi*(A/zeta)^kappa/((A/zeta)^kappa-(psi-phi)/psi))
-}
+# Initialize 'params' matrix with 4 rows and 10 columns
 
 fitness <- function(psi=Psi,A1,phi1=Phi,zeta1=Zeta,kappa1=Kappa,A2,phi2=Phi,zeta2=Zeta,kappa2=Kappa) {
   return(psi-hill(psi,A1,phi1,zeta1,kappa1)-hill(psi,A2,phi2,zeta2,kappa2))
