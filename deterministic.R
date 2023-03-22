@@ -1,7 +1,7 @@
 library(deSolve)
 
 pharmacokinetic <- FALSE # should be either TRUE or FALSE
-stewardship <- "comb" # "cycl" or "comb" or "1_only" or "2_only"
+stewardship <- "cycl" # "cycl" or "comb" or "1_only" or "2_only"
 
 # Define the parameters of the model
 D <- 0.1 # bottleneck dilution ratio
@@ -80,10 +80,10 @@ deplete <- function(dS=0,dR1=0,dR2=0,dR12=0,alpha=params[,"alpha"]) {
 
 # Define a bottleneck function that reduces all populations by a fixed fraction
 bottleneck <- function(t, populations, parms = params) {
-  if (stewardship=="cycl") {pattern <<- 1 - pattern}
   populations <- c(populations[1:4]*D, N0, pharmacokinetic*populations[6:7]+c(i1,i2)*pattern)
   # names(populations) <- c("S", "R1", "R2", "R12", "N", "A1", "A2")
   populations[populations < 0] <- 0 # backup - shouldn't be needed
+  if (stewardship=="cycl") {pattern <<- 1 - pattern}
   return(populations)
   }
 
