@@ -2,6 +2,8 @@ library(deSolve)
 
 D = 0.1 #bottleneck dilution ratio
 N0 = 100 #initial nutrient concentration
+m1 = 0.1 #rate of mutations conferring resistance to drug 1
+m2 = 0.1 #rate of mutations conferring resistance to drug 2
 
 # Initialize 'params' matrix with 4 rows and 10 columns
 params <- matrix(nrow = 4, ncol = 12)
@@ -93,10 +95,23 @@ bacterial_growth <- function(t, populations, parms = params) {
     R2 <- populations[3]
     R12 <- populations[4]
     N <- populations[5]
-    dS <- S*growth(A1=1,A2=0,N,params["S",1:9])*(1 - params["S","m_rate"])
-    dR1 <- R1*(growth(A1=1,A2=0,N,params["R1",1:9])) + (S-R1)*params["R1","m_rate"]
-    dR2 <- R2*(growth(A1=1,A2=0,N,params["R2",1:9])) + (S-R2)*params["R2","m_rate"]
-    dR12 <- R12*(growth(A1=1,A2=0,N,params["R12",1:9])) + sum(c(R1,R2)*params[c("R1","R2"),"m_rate"])
+    dS <- S*((1-m1)*(1-m2)*monod(N,params["S",8:9]) - 
+      hill(A=1,params["S",1:4]) - 
+      hill(A=0,params["S",c(1,5:7)]))
+    dR1 <- R1*((1-m2)*monod(N,params["R1",8:9]) - 
+      hill(A=1,params["R1",1:4]) - 
+      hill(A=0,params["R1",c(1,5:7)])) +
+      S*m1*(1-m2)*monod(N,params["S",8:9])
+    dR2 <- R2*((1-m1)*monod(N,params["R2",8:9]) - 
+      hill(A=1,params["R2",1:4]) - 
+      hill(A=0,params["R2",c(1,5:7)])) +
+      S*(1-m1)*m2*monod(N,params["S",8:9])
+    dR12 <- R12*(monod(N,params["R12",8:9]) -
+      hill(A=1,params["R12",1:4]) - 
+      hill(A=0,params["R12",c(1,5:7)])) +
+      S*m1*m2*monod(N,params["S",8:9]) +
+      R1*m2*monod(N,params["R1",8:9]) +
+      R2*m1*monod(N,params["R2",8:9])
     dN <- deplete(dS,dR1,dR2,dR12,params[,"alpha"])
     return(list(c(dS, dR1, dR2, dR12, dN)))
   })
