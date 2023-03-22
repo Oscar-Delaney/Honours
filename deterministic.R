@@ -42,11 +42,13 @@ params[, "m_rate"] <- c(0.1, 0.1, 0.1, 0.1)
 # Assign values to the 'r_rate' column of the matrix
 params[, "r_rate"] <- c(0.1, 0.1, 0.1, 0.1)
 
+# a pharmacodynamic function for antibioti-induced killing of bacteria
 hill <- function(A, parms) {
   psi = parms[1] ; phi = parms[2] ; zeta = parms[3]; kappa = parms[4]
   return(phi*(A/zeta)^kappa/((A/zeta)^kappa-(psi-phi)/psi))
 }
 
+# a growth rate function for nutrient-limited growth
 monod <- function(N,parms){
   mu = parms[1] ; k = parms[2]
   return(mu*N/(N+k))
@@ -57,22 +59,29 @@ growth <- function(A1,A2,N,parms) {
   return(monod(N,parms[8:9])-hill(A1,parms[1:4])-hill(A2,parms[c(1,5:7)]))
 }
 
-# antibiotics <- function(A1,A2,parms) {
-#   psi = parms[1]
-#   return(psi-hill(A1,c(psi,parms[2:4]))-hill(A2,c(psi,parms[5:7])))
-# }
-
-
-
+# a function specifying the amount of nutrients depleted by the bacteria
 deplete <- function(dS=0,dR1=0,dR2=0,dR12=0,alpha=params[,"alpha"]) {
   return(sum(-alpha*max(0,c(dS,dR1,dR2,dR12))))
 }
 
 # Define a bottleneck function that reduces all populations by a fixed fraction
-bottleneck <- function(t, populations, parms = params, fraction = D, nutrient = N0) {
-  populations <- c(populations[-5]*fraction, nutrient)
+bottleneck <- function(t, populations, parms = params) {
+  populations <- c(populations[1:4]*D, N0)
   populations[populations < 0] <- 0
   return(populations)
+  }
+
+# Define a function to plot the resulting solution
+bacteria_plot <- function(solution) {
+  plot(solution[, 1], solution[,2],type = "l", col = 1,
+  main = "Bacterial growth over time",
+  xlab = "Time", ylab = "Population size")
+  lines(solution[, 1],solution[, 3], col = 2)
+  lines(solution[, 1],solution[, 4], col = 3)
+  lines(solution[, 1],solution[, 5], col = 4)
+  lines(solution[, 1],solution[, 6], col = 5)
+  legend("topright", legend = c("S", "R1", "R2", "R12", "Nutrient"),
+  col = c(1, 2, 3, 4, 5), lty = 1)
 }
 
 
@@ -84,7 +93,7 @@ bacterial_growth <- function(t, populations, parms = params) {
     R2 <- populations[3]
     R12 <- populations[4]
     N <- populations[5]
-    dS <- S*(growth(A1=1,A2=0,N,params["S",1:9]) - params["S","m_rate"])
+    dS <- S*growth(A1=1,A2=0,N,params["S",1:9])*(1 - params["S","m_rate"])
     dR1 <- R1*(growth(A1=1,A2=0,N,params["R1",1:9])) + (S-R1)*params["R1","m_rate"]
     dR2 <- R2*(growth(A1=1,A2=0,N,params["R2",1:9])) + (S-R2)*params["R2","m_rate"]
     dR12 <- R12*(growth(A1=1,A2=0,N,params["R12",1:9])) + sum(c(R1,R2)*params[c("R1","R2"),"m_rate"])
@@ -95,13 +104,7 @@ bacterial_growth <- function(t, populations, parms = params) {
 
 # Example usage
 times <- seq(0,50,0.01)
-populations <- c(S = 100, R1 = 10, R2 = 10, R12 = 0, N = 100)
-event_times <- seq(10,40,10)
-events <- list(func = bottleneck, times = event_times)
+populations <- c(S = 100, R1 = 1, R2 = 1, R12 = 0, N = 100)
+events <- list(func = bottleneck, times = seq(10,40,10))
 solution <- ode(y = populations, times = times, func = bacterial_growth, events = events)
-plot(solution[, 1], solution[,2],type = "l", col = 1, main = "Bacterial growth over time", xlab = "Time", ylab = "Population size")
-lines(solution[, 1],solution[, 3], col = 2)
-lines(solution[, 1],solution[, 4], col = 3)
-lines(solution[, 1],solution[, 5], col = 4)
-lines(solution[, 1],solution[, 6], col = 5)
-legend("topright", legend = c("Susceptible", "Resistant1", "Resistant2", "Resistant12", "Nutrient"), col = c(1, 2, 3, 4, 5), lty = 1)
+bacteria_plot(solution)
