@@ -12,8 +12,7 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
     m2 = 0.1, # rate of mutations conferring resistance to drug 2
     d1 = 1 * pharmacokinetic, # rate of drug 1 elimination
     d2 = 1 * pharmacokinetic, # rate of drug 2 elimination
-    i1 = 10, # drug 1 influx concentration
-    i2 = 10, # drug 2 influx concentration
+    influx = c(A1 = 10, A2 = 10), # drug influx concentrations
     stewardship = stewardship, # stewardship strategy
     pharmacokinetic = pharmacokinetic # pharmacokinetic model
   )
@@ -83,11 +82,6 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
     return(mu * N / (N + k))
   }
 
-  # a growth rate function using hill and monod functions
-  # growth <- function(A1,A2,N,parms) {
-  #   return(monod(N,parms[8:9])-hill(A1,parms[1:4])-hill(A2,parms[c(1,5:7)]))
-  # }
-
   # a function specifying the amount of nutrients depleted by the bacteria
   deplete <- function(dS = 0, dR1 = 0, dR2 = 0, dR12 = 0, alpha) { # nolint
     return(sum(-alpha * max(0, c(dS, dR1, dR2, dR12))))
@@ -108,9 +102,9 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
     if (config$stewardship == "cycl") {
       pattern <- update_pattern(state["prev"])
     }
-    state <- c(state[1:4] * config$D, N = config$N0,
-      config$pharmacokinetic * state[6:7] + c(config$i1, config$i2) * pattern,
-      state["prev"] %% 2 + 1)
+    state <- c(state[c("S", "R1", "R2", "R12")] * config$D, N = config$N0,
+      config$pharmacokinetic * state[c("A1", "A2")] + config$influx * pattern,
+      state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
     state[state < 0] <- 0 # backup - shouldn't be needed
     return(state)
   }
@@ -143,7 +137,8 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
       N <- state[5]
       A1 <- state[6]
       A2 <- state[7]
-      dS <- S * ((1 - config$m1) * (1 - config$m2) * monod(N, parms["S", c("mu", "k")]) -
+      dS <- S * ((1 - config$m1) * (1 - config$m2) *
+        monod(N, parms["S", c("mu", "k")]) -
         hill(A = A1, parms["S", c("psi", "phi1", "zeta1", "kappa1")]) -
         hill(A = A2, parms["S", c("psi", "phi2", "zeta2", "kappa2")]))
       dR1 <- R1 * ((1 - config$m2) * monod(N, parms["R1", c("mu", "k")]) -
@@ -160,7 +155,7 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
         S * config$m1 * config$m2 * monod(N, parms["S", c("mu", "k")]) +
         R1 * config$m2 * monod(N, parms["R1", c("mu", "k")]) +
         R2 * config$m1 * monod(N, parms["R2", c("mu", "k")])
-      dN <- deplete(dS,dR1,dR2,dR12,params[,"alpha"])
+      dN <- deplete(dS, dR1, dR2, dR12, params[, "alpha"])
       dA1 <- -config$d1
       dA2 <- -config$d2
       return(list(c(dS, dR1, dR2, dR12, dN, dA1, dA2, 0)))
@@ -168,13 +163,12 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
   }
 
   # Example usage
-  times <- seq(0,50,0.01)
+  times <- seq(0, 50, 0.01)
   state <- c(S = 100, R1 = 10, R2 = 10, R12 = 0, N = config$N0,
-    A1 = config$i1*config$pattern[1], A2 = config$i2*config$pattern[2],
-    prev = sum(config$pattern*c(1,2)))
-  events <- list(func = bottleneck, times = seq(10,40,10))
+    config$influx * config$pattern, prev = sum(config$pattern * c(1, 2)))
+  events <- list(func = bottleneck, times = seq(10, 40, 10))
   solution <- ode(state, times, bacterial_growth, config, events = events)
   bacteria_plot(solution)
 }
 
-simulate(stewardship = "1_only")
+simulate(stewardship = "cycl")
