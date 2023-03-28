@@ -3,15 +3,19 @@ library(deSolve)
 simulate <- function(
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
+  time = 50, # time to simulate, in hours
+  dt = 0.01, # time step, in hours
+  freq = 10, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
   N0 = 100, # initial nutrient concentration
   HGT = 0.0001, # rate of horizontal gene transfer
-  m1 = 0, # rate of mutations conferring resistance to drug 1
-  m2 = 0, # rate of mutations conferring resistance to drug 2
+  m1 = 0.1, # rate of mutations conferring resistance to drug 1
+  m2 = 0.1, # rate of mutations conferring resistance to drug 2
   d1 = 1 * pharmacokinetic, # rate of drug 1 elimination
   d2 = 1 * pharmacokinetic, # rate of drug 2 elimination
   influx = c(A1 = 10, A2 = 10), # drug influx concentrations
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
+  init = c(S = 100, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
   psi = c(0.1, 0.1, 0.1, 0.1), # growth rate with no drugs
   phi1 = c(0.2, 0.2, 0.2, 0.2), # maximum killing rate for drug 1
   phi2 = c(0.2, 0.2, 0.2, 0.2), # maximum killing rate for drug 2
@@ -47,18 +51,18 @@ simulate <- function(
   rownames(config$params) <- c("S", "R1", "R2", "R12")
 
   # a pharmacodynamic function for antibioti-induced killing of bacteria
-  hill <- function(A, parms) {
-    psi <- parms[1]
-    phi <- parms[2]
-    zeta <- parms[3]
-    kappa <- parms[4]
+  hill <- function(A, params) {
+    psi <- params[1]
+    phi <- params[2]
+    zeta <- params[3]
+    kappa <- params[4]
     return(phi * (A / zeta)^kappa / ((A / zeta)^kappa - (psi - phi) / psi))
   }
 
   # a growth rate function for nutrient-limited growth
-  monod <- function(N, parms) {
-    mu <- parms[1]
-    k <- parms[2]
+  monod <- function(N, params) {
+    mu <- params[1]
+    k <- params[2]
     return(mu * N / (N + k))
   }
 
@@ -108,7 +112,7 @@ simulate <- function(
 
   # Define the differential equations for the model
   bacterial_growth <- function(t, state, config = NULL) {
-    parms <- config$params
+    params <- config$params
     with(as.list(c(state)), {
       S <- state[1]
       R1 <- state[2]
@@ -119,41 +123,41 @@ simulate <- function(
       A2 <- state[7]
       net_recombination <- config$HGT * (R1 * R2 - R12 * S)
       dS <- S * ((1 - config$m1) * (1 - config$m2) *
-        monod(N, parms["S", c("mu", "k")]) -
-        hill(A = A1, parms["S", c("psi", "phi1", "zeta1", "kappa1")]) -
-        hill(A = A2, parms["S", c("psi", "phi2", "zeta2", "kappa2")])) +
+        monod(N, params["S", c("mu", "k")]) -
+        hill(A = A1, params["S", c("psi", "phi1", "zeta1", "kappa1")]) -
+        hill(A = A2, params["S", c("psi", "phi2", "zeta2", "kappa2")])) +
         net_recombination
-      dR1 <- R1 * ((1 - config$m2) * monod(N, parms["R1", c("mu", "k")]) -
-        hill(A = A1, parms["R1", c("psi", "phi1", "zeta1", "kappa1")]) -
-        hill(A = A2, parms["R1", c("psi", "phi2", "zeta2", "kappa2")])) +
-        S * config$m1 * (1 - config$m2) * monod(N, parms["S", c("mu", "k")]) -
+      dR1 <- R1 * ((1 - config$m2) * monod(N, params["R1", c("mu", "k")]) -
+        hill(A = A1, params["R1", c("psi", "phi1", "zeta1", "kappa1")]) -
+        hill(A = A2, params["R1", c("psi", "phi2", "zeta2", "kappa2")])) +
+        S * config$m1 * (1 - config$m2) * monod(N, params["S", c("mu", "k")]) -
         net_recombination
-      dR2 <- R2 * ((1 - config$m1) * monod(N, parms["R2", c("mu", "k")]) -
-        hill(A = A1, parms["R2", c("psi", "phi1", "zeta1", "kappa1")]) -
-        hill(A = A2, parms["R2", c("psi", "phi2", "zeta2", "kappa2")])) +
-        S * (1 - config$m1) * config$m2 * monod(N, parms["S", c("mu", "k")]) -
+      dR2 <- R2 * ((1 - config$m1) * monod(N, params["R2", c("mu", "k")]) -
+        hill(A = A1, params["R2", c("psi", "phi1", "zeta1", "kappa1")]) -
+        hill(A = A2, params["R2", c("psi", "phi2", "zeta2", "kappa2")])) +
+        S * (1 - config$m1) * config$m2 * monod(N, params["S", c("mu", "k")]) -
         net_recombination
-      dR12 <- R12 * (monod(N, parms["R12", c("mu", "k")]) -
-        hill(A = A1, parms["R12", c("psi", "phi1", "zeta1", "kappa1")]) -
-        hill(A = A2, parms["R12", c("psi", "phi2", "zeta2", "kappa2")])) +
-        S * config$m1 * config$m2 * monod(N, parms["S", c("mu", "k")]) +
-        R1 * config$m2 * monod(N, parms["R1", c("mu", "k")]) +
-        R2 * config$m1 * monod(N, parms["R2", c("mu", "k")]) +
+      dR12 <- R12 * (monod(N, params["R12", c("mu", "k")]) -
+        hill(A = A1, params["R12", c("psi", "phi1", "zeta1", "kappa1")]) -
+        hill(A = A2, params["R12", c("psi", "phi2", "zeta2", "kappa2")])) +
+        S * config$m1 * config$m2 * monod(N, params["S", c("mu", "k")]) +
+        R1 * config$m2 * monod(N, params["R1", c("mu", "k")]) +
+        R2 * config$m1 * monod(N, params["R2", c("mu", "k")]) +
         net_recombination
-      dN <- deplete(dS, dR1, dR2, dR12, parms[, "alpha"])
+      dN <- deplete(dS, dR1, dR2, dR12, params[, "alpha"])
       dA1 <- -config$d1
       dA2 <- -config$d2
       return(list(c(dS, dR1, dR2, dR12, dN, dA1, dA2, 0)))
     })
   }
 
-  # Example usage
-  times <- seq(0, 50, 0.01)
-  state <- c(S = 100, R1 = 10, R2 = 10, R12 = 0, N = config$N0,
-    config$influx * config$pattern, prev = sum(config$pattern * c(1, 2)))
-  events <- list(func = bottleneck, times = seq(10, 40, 10))
+  # Run the simulation
+  times <- seq(0, time, dt)
+  state <- c(init, N = N0, influx * config$pattern,
+    prev = sum(config$pattern * c(1, 2)))
+  events <- list(func = bottleneck, times = seq(freq, time, freq))
   solution <- ode(state, times, bacterial_growth, config, events = events)
   bacteria_plot(solution)
 }
 
-simulate(stewardship = "1_only")
+simulate(stewardship = "cycl")
