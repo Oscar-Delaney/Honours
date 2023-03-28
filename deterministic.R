@@ -1,22 +1,41 @@
 library(deSolve)
 
-simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
-  # pharmacokinetic should be either TRUE or FALSE
-  # stewardship should be "cycl" or "comb" or "1_only" or "2_only"
-
+simulate <- function(
+  pharmacokinetic = FALSE, # should be either TRUE or FALSE
+  stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
+  D = 0.1, # dilution ratio at bottlenecks
+  N0 = 100, # initial nutrient concentration
+  HGT = 0.0001, # rate of horizontal gene transfer
+  m1 = 0, # rate of mutations conferring resistance to drug 1
+  m2 = 0, # rate of mutations conferring resistance to drug 2
+  d1 = 1 * pharmacokinetic, # rate of drug 1 elimination
+  d2 = 1 * pharmacokinetic, # rate of drug 2 elimination
+  influx = c(A1 = 10, A2 = 10), # drug influx concentrations
+  # lists of genotype-specific parameters, in the order S, R1, R2, R12
+  psi = c(0.1, 0.1, 0.1, 0.1), # growth rate with no drugs
+  phi1 = c(0.2, 0.2, 0.2, 0.2), # maximum killing rate for drug 1
+  phi2 = c(0.2, 0.2, 0.2, 0.2), # maximum killing rate for drug 2
+  zeta1 = c(1, 100, 1, 100), # MIC drug 1
+  zeta2 = c(1, 1, 100, 100), # MIC drug 2
+  kappa1 = c(1, 1, 1, 1), # Hill function steepness parameter drug 1
+  kappa2 = c(1, 1, 1, 1), # Hill function steepness parameter drug 2
+  mu = c(1, 1, 1, 1), # growth rate with infinite resources
+  k = c(100, 100, 100, 100), # resource concentration at half-maximal growth
+  alpha = c(1, 1, 1, 1) # resources used per unit growth
+  ) {
   # Define the parameters of the model
   config <- list(
-    D = 0.1, # bottleneck dilution ratio
-    N0 = 100, # initial nutrient concentration
-    HGT = 0.0001, # rate of horizontal gene transfer
-    m1 = 0, # rate of mutations conferring resistance to drug 1
-    m2 = 0, # rate of mutations conferring resistance to drug 2
-    d1 = 1 * pharmacokinetic, # rate of drug 1 elimination
-    d2 = 1 * pharmacokinetic, # rate of drug 2 elimination
-    influx = c(A1 = 10, A2 = 10), # drug influx concentrations
-    stewardship = stewardship, # stewardship strategy
-    pharmacokinetic = pharmacokinetic # pharmacokinetic model
-  )
+    D = D,
+    N0 = N0,
+    HGT = HGT,
+    m1 = m1,
+    m2 = m2,
+    d1 = d1,
+    d2 = d2,
+    influx = influx,
+    stewardship = stewardship,
+    pharmacokinetic = pharmacokinetic
+    )
   if (stewardship == "2_only") {
     config$pattern <- c(0, 1)
   } else if (stewardship == "comb") {
@@ -24,48 +43,8 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
   } else {
     config$pattern <- c(1, 0)
   }
-
-  # Initialize 'params' matrix with 4 rows and 10 columns
-  params <- matrix(nrow = 4, ncol = 12)
-
-  # Name the rows of the matrix
-  rownames(params) <- c("S", "R1", "R2", "R12")
-
-  # Name the columns of the matrix
-  colnames(params) <- c("psi", "phi1", "zeta1", "kappa1",
-    "phi2", "zeta2", "kappa2", "mu", "k", "alpha", "m_rate", "r_rate")
-
-  # Assign values to the 'psi' column of the matrix
-  params[, "psi"] <- c(0.1, 0.1, 0.1, 0.1)
-
-  # Assign values to the 'phi1' and 'phi2' columns of the matrix
-  params[, c("phi1", "phi2")] <- c(0.2, 0.2, 0.2, 0.2)
-
-  # Assign values to the 'zeta1' column of the matrix
-  params[, "zeta1"] <- c(1, 100, 1, 100)
-
-  # Assign values to the 'zeta2' column of the matrix
-  params[, "zeta2"] <- c(1, 1, 100, 100)
-
-  # Assign values to the 'kappa1' and 'kappa2' columns of the matrix
-  params[, c("kappa1", "kappa2")] <- c(1, 1, 1, 1)
-
-  # Assign values to the 'mu' column of the matrix
-  params[, "mu"] <- c(1, 1, 1, 1)
-
-  # Assign values to the 'k' column of the matrix
-  params[, "k"] <- c(100, 100, 100, 100)
-
-  # Assign values to the 'alpha' column of the matrix
-  params[, "alpha"] <- c(1, 1, 1, 1)
-
-  # Assign values to the 'm_rate' column of the matrix
-  params[, "m_rate"] <- c(0.1, 0.1, 0.1, 0.1)
-
-  # Assign values to the 'r_rate' column of the matrix
-  params[, "r_rate"] <- c(0.1, 0.1, 0.1, 0.1)
-
-  config$params <- params
+  config$params <- cbind(psi, phi1, phi2, zeta1, zeta2, kappa1, kappa2, mu, k, alpha)
+  rownames(config$params) <- c("S", "R1", "R2", "R12")
 
   # a pharmacodynamic function for antibioti-induced killing of bacteria
   hill <- function(A, parms) {
@@ -161,7 +140,7 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
         R1 * config$m2 * monod(N, parms["R1", c("mu", "k")]) +
         R2 * config$m1 * monod(N, parms["R2", c("mu", "k")]) +
         net_recombination
-      dN <- deplete(dS, dR1, dR2, dR12, params[, "alpha"])
+      dN <- deplete(dS, dR1, dR2, dR12, parms[, "alpha"])
       dA1 <- -config$d1
       dA2 <- -config$d2
       return(list(c(dS, dR1, dR2, dR12, dN, dA1, dA2, 0)))
@@ -177,4 +156,4 @@ simulate <- function(pharmacokinetic = FALSE, stewardship = "cycl") {
   bacteria_plot(solution)
 }
 
-simulate(stewardship = "cycl")
+simulate(stewardship = "1_only")
