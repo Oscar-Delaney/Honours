@@ -1,6 +1,6 @@
 library(deSolve)
 
-simulate <- function(
+simulate_d <- function(
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   time = 50, # time to simulate, in hours
@@ -8,7 +8,7 @@ simulate <- function(
   freq = 10, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
   N0 = 100, # initial nutrient concentration
-  HGT = 0.0001, # rate of horizontal gene transfer
+  HGT = 0.0000, # rate of horizontal gene transfer
   m1 = 0.1, # rate of mutations conferring resistance to drug 1
   m2 = 0.1, # rate of mutations conferring resistance to drug 2
   d1 = 1 * pharmacokinetic, # rate of drug 1 elimination
@@ -67,10 +67,11 @@ simulate <- function(
   }
 
   # a function specifying the amount of nutrients depleted by the bacteria
-  deplete <- function(dS = 0, dR1 = 0, dR2 = 0, dR12 = 0, alpha) { # nolint
-    return(sum(-alpha * max(0, c(dS, dR1, dR2, dR12))))
+  deplete <- function(state,alpha,monod_params) {
+    return(sum(sapply(1:length(alpha), function(i) {
+      alpha[i] * monod(state["N"],monod_params[i,]) * state[i]
+    })))
   }
-
   # create the right pattern based on the previous drug administered
   update_pattern <- function(prev = 1) {
     # if the previous drug administered was 1, then the next drug is 2
@@ -144,10 +145,10 @@ simulate <- function(
         R1 * config$m2 * monod(N, params["R1", c("mu", "k")]) +
         R2 * config$m1 * monod(N, params["R2", c("mu", "k")]) +
         net_recombination
-      dN <- deplete(dS, dR1, dR2, dR12, params[, "alpha"])
-      dA1 <- -config$d1
-      dA2 <- -config$d2
-      return(list(c(dS, dR1, dR2, dR12, dN, dA1, dA2, 0)))
+      dN <- -deplete(state, params[, "alpha"],params[, c("mu","k")])
+      dA1 <- -config$d1 * A1
+      dA2 <- -config$d2 * A2
+      return(list(c(S = dS, R1 = dR1, R2 = dR2, R12 = dR12, N = dN, A1 = dA1, A2 = dA2, prev = 0)))
     })
   }
 
@@ -160,4 +161,4 @@ simulate <- function(
   bacteria_plot(solution)
 }
 
-simulate(stewardship = "cycl")
+simulate_d()
