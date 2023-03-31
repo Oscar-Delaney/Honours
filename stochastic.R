@@ -163,19 +163,29 @@ bacteria_plot <- function(solution) {
 
 log_plot <- function(solution){
   # Create a long format data frame for easier plotting with ggplot2
-  df <- reshape2::melt(as.data.frame(solution), id.vars = "time")
+  df <- reshape2::melt(
+    as.data.frame(solution[, colnames(solution) != "prev"]), id.vars = "time")
+  # df$value <- df$value + 1
   # Create the plot
   plot <- ggplot(data = df, aes(x = time, y = value, color = variable)) +
-    geom_line() +
+    geom_line(size=1.5) +
     scale_y_log10() +
     labs(
-      title = "Your Plot Title",
+      title = "Bacterial growth over time",
       x = "Time",
-      y = "Value (log scale)",
+      y = "Population Size",
       color = "Variable"
     ) +
-    theme_minimal() +
-    theme(legend.position = "bottom")
+    theme_light() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20)
+    )
+    theme(legend.position = "top")
 
   # Display the plot
   print(plot)
@@ -295,4 +305,5 @@ simulate_s <- function(
   return(solution)
 }
 
-bacteria_plot(simulate_s(pharmacokinetic = TRUE))
+# bacteria_plot(simulate_s(pharmacokinetic = TRUE))
+log_plot(simulate_s(N0=1e5))
