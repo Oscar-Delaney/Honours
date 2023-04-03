@@ -1,6 +1,7 @@
 library(adaptivetau)
 library(ggplot2)
 library(reshape2)
+library(dplyr)
 
 # a pharmacodynamic function for antibioti-induced killing of bacteria
 hill <- function(A, params) {
@@ -145,51 +146,31 @@ rates <- function(state, config, t) {
   
 }
 
-# Define a function to plot the resulting solution
-bacteria_plot <- function(solution) {
-  plot(solution[, 1], solution[, 2], type = "l", col = 1,
-    main = "Bacterial growth over time",
-    xlab = "Time", ylab = "Population size")
-  lines(solution[, 1], solution[, 3], col = 2)
-  lines(solution[, 1], solution[, 4], col = 3)
-  lines(solution[, 1], solution[, 5], col = 4)
-  lines(solution[, 1], solution[, 6], col = 5)
-  lines(solution[, 1], solution[, 7], col = 6)
-  lines(solution[, 1], solution[, 8], col = 7)
-  legend("topright",
-    legend = c("S", "R1", "R2", "R12", "Nutrient", "A1", "A2"),
-    col = c(1, 2, 3, 4, 5, 6, 7), lty = 1)
-}
-
-log_plot <- function(solution) {
-  df <- reshape2::melt(
-    as.data.frame(solution), id.vars = "time")
-
-  # Filter the df to only include columns S, R1, R2, and R12
-  df <- df[df$variable %in% c("S", "R1", "R2", "R12"), ]
-  solution_df <- as.data.frame(solution)
+log_plot <- function(solution){
+  # Create a long format data frame for easier plotting with ggplot2
+  df <- reshape2::melt(solution[c("time", "S", "R1", "R2", "R12")], id.vars = "time")
   background_df <- data.frame(
-    xmin = solution_df$time,
-    xmax = c(solution_df$time[-1], solution_df$time[length(solution_df$time)]),
+    xmin = solution$time,
+    xmax = c(solution$time[-1], solution$time[length(solution$time)]),
     ymin = 0,
     ymax = max(df$value, na.rm = TRUE),
-    A1 = solution_df$A1/max(solution_df$A1),
-    A2 = solution_df$A2/max(solution_df$A2)
+    A1 = solution$A1 / max(solution$A1),
+    A2 = solution$A2 / max(solution$A2)
   )
 
   # Create the plot
   plot <- ggplot() +
     # Add the gradient background
-    geom_rect(
-      data = background_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax,
-                                fill = A1 - A2),
-      color = NA
-    ) +
-    scale_fill_gradient2(low = "#bed5ec", mid = "white", high = "#ecbed5", limits = c(-1, 1),
-                         name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
-    # # Add the lines
-    geom_line(data = df, aes(x = time, y = value, color = variable), linewidth = 1.5) +
-    # scale_y_continuous(trans=scales::pseudo_log_trans(sigma = 10, base = 10)) +
+    geom_rect(data = background_df,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = A2 - A1),
+      color = NA) +
+    scale_fill_gradient2(low = "#ecbed5", mid = "white", high = "#bed5ec",
+      limits = c(-1, 1), name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
+    # Add the lines
+    geom_line(data = df,
+      aes(x = time, y = value, color = variable), size = 1.5) +
+    scale_color_manual(values = c("black", "red", "blue", "purple")) +
+    # scale_y_continuous(scales::pseudo_log_trans(sigma = 1, base = 10)) +
     scale_y_log10() +
     labs(
       title = "Bacterial growth over time",
@@ -206,14 +187,13 @@ log_plot <- function(solution) {
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
-
-
   # Display the plot
   print(plot)
 }
 
 # Define a function to simulate the model
 simulate_s <- function(
+  rep = 1,
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   deterministic = c(
@@ -233,8 +213,8 @@ simulate_s <- function(
   HGT = 0.000, # rate of horizontal gene transfer
   m1 = 0.1, # rate of mutations conferring resistance to drug 1
   m2 = 0.1, # rate of mutations conferring resistance to drug 2
-  d1 = 1 * pharmacokinetic, # rate of drug 1 elimination
-  d2 = 1 * pharmacokinetic, # rate of drug 2 elimination
+  d1 = 0.1 * pharmacokinetic, # rate of drug 1 elimination
+  d2 = 0.1 * pharmacokinetic, # rate of drug 2 elimination
   influx = c(A1 = 10, A2 = 10), # drug influx concentrations
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
   init = c(S = 100, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
@@ -293,37 +273,66 @@ simulate_s <- function(
   # Define the transitions of the model
   transitions <- make_transitions()
 
-  # Run the simulation
-  state <- c(init, N = config$N0, config$influx * config$pattern,
-    prev = sum(config$pattern * c(1, 2)))
-  t <- 0
-  while (t < time) {
-    # Run the model between bottlenecks
-    new_solution <- ssa.adaptivetau(state, transitions, rates, config, tf = freq,
-      deterministic = config$deterministic)
-    # Make the time column reflect the overall time accurately
-    new_solution[, 1] <- new_solution[, 1] + t
-    # Run the bottleneck and update the state
-    state <- bottleneck(
-      state = new_solution[nrow(new_solution), ],
-      pattern = config$pattern,
-      D = config$D,
-      N0 = config$N0,
-      influx = config$influx,
-      cycl = config$stewardship == "cycl",
-      pharmacokinetic = config$pharmacokinetic,
-      deterministic = deterministic["dilution"]
+  # Make a common time grid
+  time_grid <- seq(0, time, by = dt)
+
+  # Run the simulation rep number of times
+  solutions = lapply(1:rep, function(x) {
+    state <- c(init, N = config$N0, config$influx * config$pattern,
+      prev = sum(config$pattern * c(1, 2)))
+    t <- 0
+    while (t < time) {
+      # Run the model between bottlenecks
+      new_solution <- ssa.adaptivetau(state, transitions, rates, config, tf = freq,
+        deterministic = config$deterministic)
+      # Make the time column reflect the overall time accurately
+      new_solution[, 1] <- new_solution[, 1] + t
+      # Run the bottleneck and update the state
+      state <- bottleneck(
+        state = new_solution[nrow(new_solution), ],
+        pattern = config$pattern,
+        D = config$D,
+        N0 = config$N0,
+        influx = config$influx,
+        cycl = config$stewardship == "cycl",
+        pharmacokinetic = config$pharmacokinetic,
+        deterministic = deterministic["dilution"]
+      )
+
+      # Update the solution
+      if (t==0) {solution <- new_solution}
+      else {solution <- rbind(solution, new_solution[-1,])}
+      # Update the time
+      t <- t + freq
+    }
+    # Interpolate the solution to the common time grid
+    solution <- as.data.frame(solution)
+    solution <- data.frame(
+      time = time_grid,
+      S = approx(solution$time, solution$S, xout = time_grid)$y,
+      R1 = approx(solution$time, solution$R1, xout = time_grid)$y,
+      R2 = approx(solution$time, solution$R2, xout = time_grid)$y,
+      R12 = approx(solution$time, solution$R12, xout = time_grid)$y,
+      N = approx(solution$time, solution$N, xout = time_grid)$y,
+      A1 = approx(solution$time, solution$A1, xout = time_grid)$y,
+      A2 = approx(solution$time, solution$A2, xout = time_grid)$y,
+      rep = x
     )
-
-    # Update the solution
-    if (t==0) {solution <- new_solution}
-    else {solution <- rbind(solution, new_solution)}
-    # Update the time
-    t <- t + freq
-  }
-
-  return(solution)
+    return(solution)
+  })
+  return(do.call(rbind, solutions))
 }
+combined_df = simulate_s(rep=10, dt=1)
+melted_df = melt(combined_df, id.vars = c("time", "rep"), variable.name = "variable")
 
-# bacteria_plot(simulate_s(pharmacokinetic = TRUE))
-log_plot(simulate_s(N0=1e5))
+summary_df <- melted_df %>%
+  group_by(time, variable) %>%
+  summarize(
+    mean_value = mean(value),
+    sd_value = sd(value),
+    se_value = sd_value / sqrt(n()),
+    ci_lower = mean_value - 1.96 * se_value,
+    ci_upper = mean_value + 1.96 * se_value
+  )
+
+log_plot(simulate_s(N0=1e5, pharmacokinetic = TRUE))
