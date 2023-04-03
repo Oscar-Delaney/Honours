@@ -161,20 +161,41 @@ bacteria_plot <- function(solution) {
     col = c(1, 2, 3, 4, 5, 6, 7), lty = 1)
 }
 
-log_plot <- function(solution){
-  # Create a long format data frame for easier plotting with ggplot2
+log_plot <- function(solution) {
   df <- reshape2::melt(
-    as.data.frame(solution[, colnames(solution) != "prev"]), id.vars = "time")
-  # df$value <- df$value + 1
+    as.data.frame(solution), id.vars = "time")
+
+  # Filter the df to only include columns S, R1, R2, and R12
+  df <- df[df$variable %in% c("S", "R1", "R2", "R12"), ]
+  solution_df <- as.data.frame(solution)
+  background_df <- data.frame(
+    xmin = solution_df$time,
+    xmax = c(solution_df$time[-1], solution_df$time[length(solution_df$time)]),
+    ymin = 0,
+    ymax = max(df$value, na.rm = TRUE),
+    A1 = solution_df$A1/max(solution_df$A1),
+    A2 = solution_df$A2/max(solution_df$A2)
+  )
+
   # Create the plot
-  plot <- ggplot(data = df, aes(x = time, y = value, color = variable)) +
-    geom_line(size=1.5) +
+  plot <- ggplot() +
+    # Add the gradient background
+    geom_rect(
+      data = background_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax,
+                                fill = A1 - A2),
+      color = NA
+    ) +
+    scale_fill_gradient2(low = "#bed5ec", mid = "white", high = "#ecbed5", limits = c(-1, 1),
+                         name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
+    # # Add the lines
+    geom_line(data = df, aes(x = time, y = value, color = variable), linewidth = 1.5) +
+    # scale_y_continuous(trans=scales::pseudo_log_trans(sigma = 10, base = 10)) +
     scale_y_log10() +
     labs(
       title = "Bacterial growth over time",
       x = "Time",
       y = "Population Size",
-      color = "Variable"
+      color = NULL
     ) +
     theme_light() +
     theme(
@@ -185,11 +206,10 @@ log_plot <- function(solution){
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
-    theme(legend.position = "top")
+
 
   # Display the plot
   print(plot)
-
 }
 
 # Define a function to simulate the model
