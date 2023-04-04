@@ -146,51 +146,6 @@ rates <- function(state, config, t) {
   
 }
 
-log_plot <- function(solution){
-  # Create a long format data frame for easier plotting with ggplot2
-  df <- reshape2::melt(solution[c("time", "S", "R1", "R2", "R12")], id.vars = "time")
-  background_df <- data.frame(
-    xmin = solution$time,
-    xmax = c(solution$time[-1], solution$time[length(solution$time)]),
-    ymin = 0,
-    ymax = max(df$value, na.rm = TRUE),
-    A1 = solution$A1 / max(solution$A1),
-    A2 = solution$A2 / max(solution$A2)
-  )
-
-  # Create the plot
-  plot <- ggplot() +
-    # Add the gradient background
-    geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = A2 - A1),
-      color = NA) +
-    scale_fill_gradient2(low = "#ecbed5", mid = "white", high = "#bed5ec",
-      limits = c(-1, 1), name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
-    # Add the lines
-    geom_line(data = df,
-      aes(x = time, y = value, color = variable), size = 1.5) +
-    scale_color_manual(values = c("black", "red", "blue", "purple")) +
-    # scale_y_continuous(scales::pseudo_log_trans(sigma = 1, base = 10)) +
-    scale_y_log10() +
-    labs(
-      title = "Bacterial growth over time",
-      x = "Time",
-      y = "Population Size",
-      color = NULL
-    ) +
-    theme_light() +
-    theme(
-      legend.position = "bottom",
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20)
-    )
-  # Display the plot
-  print(plot)
-}
-
 # Define a function to simulate the model
 simulate_s <- function(
   rep = 1,
@@ -322,17 +277,120 @@ simulate_s <- function(
   })
   return(do.call(rbind, solutions))
 }
-combined_df = simulate_s(rep=10, dt=1)
-melted_df = melt(combined_df, id.vars = c("time", "rep"), variable.name = "variable")
 
-summary_df <- melted_df %>%
-  group_by(time, variable) %>%
-  summarize(
-    mean_value = mean(value),
-    sd_value = sd(value),
-    se_value = sd_value / sqrt(n()),
-    ci_lower = mean_value - 1.96 * se_value,
-    ci_upper = mean_value + 1.96 * se_value
+# A function to summarise the output of the simulation
+summarise <- function(solutions) {
+  melted = melt(solutions, id.vars = c("time", "rep"))
+  summary <- melted %>%
+    group_by(time, variable) %>%
+    summarize(
+      mean = mean(value),
+      sd = sd(value),
+      se = sd / sqrt(n()),
+      ci_lower = mean - 1.96 * se,
+      ci_upper = mean + 1.96 * se
+    )
+  return(summary)
+}
+
+log_plot <- function(solution){
+  # Create a long format data frame for easier plotting with ggplot2
+  df <- reshape2::melt(solution[c("time", "S", "R1", "R2", "R12")], id.vars = "time")
+  background_df <- data.frame(
+    xmin = solution$time,
+    xmax = c(solution$time[-1], solution$time[length(solution$time)]),
+    ymin = 0,
+    ymax = max(df$value, na.rm = TRUE),
+    A1 = solution$A1 / max(solution$A1),
+    A2 = solution$A2 / max(solution$A2)
   )
+
+  # Create the plot
+  plot <- ggplot() +
+    # Add the gradient background
+    geom_rect(data = background_df,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = A2 - A1),
+      color = NA) +
+    scale_fill_gradient2(low = "#ecbed5", mid = "white", high = "#bed5ec",
+      limits = c(-1, 1), name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
+    # Add the lines
+    geom_line(data = df,
+      aes(x = time, y = value, color = variable), linewidth = 1.5) +
+    scale_color_manual(values = c("black", "red", "blue", "purple")) +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+                    #  breaks = scales::trans_breaks("log10", function(x) 10^x),
+                     breaks = c(1, 10, 100, 1000, 10000, 100000),
+                     labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    # scale_y_continuous(trans = scales::pseudo_log_trans(base = 10)) +
+    # scale_y_continuous(trans = scales::log10_trans()) +
+    # scale_y_log10() +
+    labs(
+      title = "Bacterial growth over time",
+      x = "Time",
+      y = "Population Size",
+      color = NULL
+    ) +
+    theme_light() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20)
+    )
+  # Display the plot
+  print(plot)
+}
+
+log_plot(simulate_s(N0=1e5))
+log_plot_CI <- function(summary){
+  filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
+  times = unique(summary$time)
+  background_df <- data.frame(
+    xmin = times[-length(times)],
+    xmax = times[-1],
+    ymin = 0,
+    ymax = 1, #max(df$value, na.rm = TRUE),
+    A1 = summary$A1[-1] / max(solution$A1),
+    A2 = solution$A2[-1] / max(solution$A2)
+  )
+  
+  # Create the plot
+  plot <- ggplot() +
+    # Add the gradient background
+    geom_rect(data = background_df,
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = A2 - A1),
+              color = NA) +
+    scale_fill_gradient2(low = "#ecbed5", mid = "white", high = "#bed5ec",
+                         limits = c(-1, 1), name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
+    # Add the lines
+    geom_line(data = filtered,
+              aes(x = time, y = mean, color = variable), size = 1.5) +
+    scale_color_manual(values = c("black", "red", "blue", "purple")) +
+    # Add the confidence intervals
+    geom_ribbon(data = filtered, aes(ymin = ci_lower, ymax = ci_upper, fill = variable), alpha = 0.3) +
+    # scale_y_continuous(scales::pseudo_log_trans(sigma = 1, base = 10)) +
+    scale_y_log10() +
+    labs(
+      title = "Bacterial growth over time",
+      x = "Time",
+      y = "Population Size",
+      color = NULL
+      fill = NULL
+    ) +
+    theme_light() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20)
+    )
+  # Display the plot
+  print(plot)
+}
+
 
 log_plot(simulate_s(N0=1e5, pharmacokinetic = TRUE))
