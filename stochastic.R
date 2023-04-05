@@ -355,7 +355,6 @@ log_plot <- function(summary) {
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
-    # guides(fill = guide_legend(order = 1))
   # Display the plot
   print(plot)
 }
