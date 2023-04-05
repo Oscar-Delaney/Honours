@@ -1,5 +1,6 @@
 library(adaptivetau)
 library(ggplot2)
+library(ggnewscale)
 library(reshape2)
 library(dplyr)
 
@@ -20,9 +21,9 @@ monod <- function(N, params) {
 }
 
 # a function specifying the amount of nutrients depleted by the bacteria
-deplete <- function(state,alpha,monod_params) {
+deplete <- function(state, alpha, monod_params) {
   return(sum(sapply(seq_along(alpha), function(i) {
-    alpha[i] * monod(state["N"],monod_params[i,]) * state[i]
+    alpha[i] * monod(state["N"], monod_params[i, ]) * state[i]
   })))
 }
 
@@ -35,12 +36,12 @@ update_pattern <- function(prev = 1) {
   return(c(1, 0))
 }
 
-# Define a bottleneck function that reduces all state by a fixed fraction
+# a function that reduces all populations by a factor of D, in expectation
 bottleneck <- function(state,
-  pattern = c(1,1),
+  pattern = c(1, 1),
   D = 0.1,
   N0 = 100,
-  influx = c(10,10),
+  influx = c(10, 10),
   cycl = FALSE,
   pharmacokinetic = FALSE,
   deterministic = FALSE) {
@@ -64,7 +65,7 @@ bottleneck <- function(state,
   return(state)
 }
 
-# a function returning the transitions that can occur in the model
+# a function outputting the transitions that can occur in the model
 make_transitions <- function() {
   return(list(
   c(S = +1), # growth in S
@@ -86,8 +87,7 @@ make_transitions <- function() {
 ))
 }
 
-# a function returning the rate at which each transition occurs,
-# given the current state and parameters
+# computing transition rates, given the current state and parameters
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # extract the parameters
@@ -105,7 +105,7 @@ rates <- function(state, config, t) {
     R1_growth <- R1 * (1 - config$m2) * monod(N, params["R1", c("mu", "k")])
     R2_growth <- R2 * (1 - config$m1) * monod(N, params["R2", c("mu", "k")])
     R12_growth <- R12 * monod(N, params["R12", c("mu", "k")])
-    S_death <- S* (hill(A = A1, params["S", c("psi", "phi1", "zeta1", "kappa1")])
+    S_death <- S * (hill(A = A1, params["S", c("psi", "phi1", "zeta1", "kappa1")])
       + hill(A = A2, params["S", c("psi", "phi2", "zeta2", "kappa2")]))
     R1_death <- R1 * (hill(A = A1, params["R1", c("psi", "phi1", "zeta1", "kappa1")])
       + hill(A = A2, params["R1", c("psi", "phi2", "zeta2", "kappa2")]))
@@ -122,7 +122,7 @@ rates <- function(state, config, t) {
     HGT_MDR_gain <- config$HGT * R1 * R2
     A1_depletion <- config$d1 * A1
     A2_depletion <- config$d2 * A2
-    N_depletion <- deplete(state, params[, "alpha"],params[, c("mu","k")])
+    N_depletion <- deplete(state, params[, "alpha"], params[, c("mu", "k")])
     # return the rates
     return(c(
       S_growth = unname(S_growth),
@@ -143,11 +143,62 @@ rates <- function(state, config, t) {
       N_depletion = unname(N_depletion)
     ))
   })
-  
+
 }
 
-# Define a function to simulate the model
-simulate_s <- function(
+# a function to implement one run of the model
+single_run <- function(config, x) {
+  # Define the transitions of the model
+  transitions <- make_transitions()
+  # Initialise the state variables
+  state <- c(config$init, N = config$N0, config$influx * config$pattern,
+      prev = sum(config$pattern * c(1, 2)))
+  t <- 0
+  while (t < max(config$time_grid)) {
+    # Run the model between bottlenecks
+    new_solution <- ssa.adaptivetau(state, transitions, rates, config,
+      tf = config$freq, deterministic = config$deterministic)
+    # Make the time column reflect the overall time accurately
+    new_solution[, 1] <- new_solution[, 1] + t
+    # Run the bottleneck and update the state
+    state <- bottleneck(
+      state = new_solution[nrow(new_solution), ],
+      pattern = config$pattern,
+      D = config$D,
+      N0 = config$N0,
+      influx = config$influx,
+      cycl = config$stewardship == "cycl",
+      pharmacokinetic = config$pharmacokinetic,
+      deterministic = config$deterministic_dilution
+    )
+
+    # Update the solution
+    if (t == 0) {
+      solution <- new_solution
+    } else {
+      solution <- rbind(solution, new_solution[-1, ])
+    }
+    # Update the time
+    t <- t + config$freq
+  }
+  # Interpolate the solution to the common time grid
+  solution <- as.data.frame(solution)
+  solution <- data.frame(
+    time = config$time_grid,
+    S = approx(solution$time, solution$S, xout = config$time_grid)$y,
+    R1 = approx(solution$time, solution$R1, xout = config$time_grid)$y,
+    R2 = approx(solution$time, solution$R2, xout = config$time_grid)$y,
+    R12 = approx(solution$time, solution$R12, xout = config$time_grid)$y,
+    N = approx(solution$time, solution$N, xout = config$time_grid)$y,
+    A1 = approx(solution$time, solution$A1, xout = config$time_grid)$y,
+    A2 = approx(solution$time, solution$A2, xout = config$time_grid)$y,
+    rep = x
+  )
+  return(solution)
+}
+
+# a function to simulate the model
+simulate <- function(
   rep = 1,
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
@@ -188,6 +239,7 @@ simulate_s <- function(
   config <- list(
     D = D,
     N0 = N0,
+    init = init,
     HGT = HGT,
     m1 = m1,
     m2 = m2,
@@ -196,6 +248,9 @@ simulate_s <- function(
     influx = influx,
     stewardship = stewardship,
     pharmacokinetic = pharmacokinetic,
+    freq = freq,
+    time_grid = seq(0, time, by = dt), # a common time grid for all runs
+    deterministic_dilution = deterministic["dilution"],
     deterministic = c(
       S_growth = deterministic["growth"],
       R1_growth = deterministic["growth"],
@@ -225,159 +280,70 @@ simulate_s <- function(
   config$params <- cbind(psi, phi1, phi2, zeta1, zeta2, kappa1, kappa2, mu, k, alpha)
   rownames(config$params) <- c("S", "R1", "R2", "R12")
 
-  # Define the transitions of the model
-  transitions <- make_transitions()
-
-  # Make a common time grid
-  time_grid <- seq(0, time, by = dt)
-
   # Run the simulation rep number of times
-  solutions = lapply(1:rep, function(x) {
-    state <- c(init, N = config$N0, config$influx * config$pattern,
-      prev = sum(config$pattern * c(1, 2)))
-    t <- 0
-    while (t < time) {
-      # Run the model between bottlenecks
-      new_solution <- ssa.adaptivetau(state, transitions, rates, config, tf = freq,
-        deterministic = config$deterministic)
-      # Make the time column reflect the overall time accurately
-      new_solution[, 1] <- new_solution[, 1] + t
-      # Run the bottleneck and update the state
-      state <- bottleneck(
-        state = new_solution[nrow(new_solution), ],
-        pattern = config$pattern,
-        D = config$D,
-        N0 = config$N0,
-        influx = config$influx,
-        cycl = config$stewardship == "cycl",
-        pharmacokinetic = config$pharmacokinetic,
-        deterministic = deterministic["dilution"]
-      )
-
-      # Update the solution
-      if (t==0) {solution <- new_solution}
-      else {solution <- rbind(solution, new_solution[-1,])}
-      # Update the time
-      t <- t + freq
-    }
-    # Interpolate the solution to the common time grid
-    solution <- as.data.frame(solution)
-    solution <- data.frame(
-      time = time_grid,
-      S = approx(solution$time, solution$S, xout = time_grid)$y,
-      R1 = approx(solution$time, solution$R1, xout = time_grid)$y,
-      R2 = approx(solution$time, solution$R2, xout = time_grid)$y,
-      R12 = approx(solution$time, solution$R12, xout = time_grid)$y,
-      N = approx(solution$time, solution$N, xout = time_grid)$y,
-      A1 = approx(solution$time, solution$A1, xout = time_grid)$y,
-      A2 = approx(solution$time, solution$A2, xout = time_grid)$y,
-      rep = x
-    )
-    return(solution)
-  })
+  solutions <- lapply(1:rep, function(x) {single_run(config, x)})
   return(do.call(rbind, solutions))
 }
 
 # A function to summarise the output of the simulation
 summarise <- function(solutions) {
-  melted = melt(solutions, id.vars = c("time", "rep"))
+  melted <- melt(solutions, id.vars = c("time", "rep"))
   summary <- melted %>%
     group_by(time, variable) %>%
     summarize(
       mean = mean(value),
       sd = sd(value),
       se = sd / sqrt(n()),
-      ci_lower = mean - 1.96 * se,
+      ci_lower = max(0, mean - 1.96 * se),
       ci_upper = mean + 1.96 * se
     )
   return(summary)
 }
 
-log_plot <- function(solution){
-  # Create a long format data frame for easier plotting with ggplot2
-  df <- reshape2::melt(solution[c("time", "S", "R1", "R2", "R12")], id.vars = "time")
-  background_df <- data.frame(
-    xmin = solution$time,
-    xmax = c(solution$time[-1], solution$time[length(solution$time)]),
-    ymin = 0,
-    ymax = max(df$value, na.rm = TRUE),
-    A1 = solution$A1 / max(solution$A1),
-    A2 = solution$A2 / max(solution$A2)
-  )
-
-  # Create the plot
-  plot <- ggplot() +
-    # Add the gradient background
-    geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = A2 - A1),
-      color = NA) +
-    scale_fill_gradient2(low = "#ecbed5", mid = "white", high = "#bed5ec",
-      limits = c(-1, 1), name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
-    # Add the lines
-    geom_line(data = df,
-      aes(x = time, y = value, color = variable), linewidth = 1.5) +
-    scale_color_manual(values = c("black", "red", "blue", "purple")) +
-    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                    #  breaks = scales::trans_breaks("log10", function(x) 10^x),
-                     breaks = c(1, 10, 100, 1000, 10000, 100000),
-                     labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    # scale_y_continuous(trans = scales::pseudo_log_trans(base = 10)) +
-    # scale_y_continuous(trans = scales::log10_trans()) +
-    # scale_y_log10() +
-    labs(
-      title = "Bacterial growth over time",
-      x = "Time",
-      y = "Population Size",
-      color = NULL
-    ) +
-    theme_light() +
-    theme(
-      legend.position = "bottom",
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20)
-    )
-  # Display the plot
-  print(plot)
-}
-
-log_plot(simulate_s(N0=1e5))
-log_plot_CI <- function(summary){
+log_plot <- function(summary) {
   filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
-  times = unique(summary$time)
+  colors <- c("black", "#24517E", "#7e2451", "#517E24")
+  times <- unique(summary$time)
   background_df <- data.frame(
     xmin = times[-length(times)],
     xmax = times[-1],
-    ymin = 0,
-    ymax = 1, #max(df$value, na.rm = TRUE),
-    A1 = summary$A1[-1] / max(solution$A1),
-    A2 = solution$A2[-1] / max(solution$A2)
+    A1 = summary[summary$variable == "A1", ]$mean[-1] /
+      max(summary[summary$variable == "A1", ]$mean),
+    A2 = summary[summary$variable == "A2", ]$mean[-1] /
+      max(summary[summary$variable == "A2", ]$mean)
   )
-  
   # Create the plot
   plot <- ggplot() +
-    # Add the gradient background
+    # Add the gradient backgrounds
     geom_rect(data = background_df,
-              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = A2 - A1),
-              color = NA) +
-    scale_fill_gradient2(low = "#ecbed5", mid = "white", high = "#bed5ec",
-                         limits = c(-1, 1), name = NULL, breaks = c(-1,1), labels = c("A1","A2")) +
+      aes(xmin = xmin, xmax = xmax, ymin = -2, ymax = -1, fill = A1),
+      color = NA, alpha = 1) +
+    scale_fill_gradient(low = "white", high = "#24517E",
+      limits = c(0, 1), name = "A1", labels = NULL) +
+    new_scale_fill() +
+    geom_rect(data = background_df,
+      aes(xmin = xmin, xmax = xmax, ymin = -1, ymax = 0, fill = A2),
+      color = NA, alpha = 1) +
+    scale_fill_gradient(low = "white", high = "#7e2451",
+      limits = c(0, 1), name = "A2", labels = NULL) +
     # Add the lines
-    geom_line(data = filtered,
-              aes(x = time, y = mean, color = variable), size = 1.5) +
-    scale_color_manual(values = c("black", "red", "blue", "purple")) +
+    new_scale_fill() +
+    geom_line(data = filtered, aes(x = time, y = mean, color = variable),
+      linewidth = 1.5) +
+    scale_color_manual(values = colors) +
     # Add the confidence intervals
-    geom_ribbon(data = filtered, aes(ymin = ci_lower, ymax = ci_upper, fill = variable), alpha = 0.3) +
-    # scale_y_continuous(scales::pseudo_log_trans(sigma = 1, base = 10)) +
-    scale_y_log10() +
+    geom_ribbon(data = filtered, alpha = 0.3,
+      aes(x = time, ymin = ci_lower, ymax = ci_upper, fill = variable)) +
+    scale_fill_manual(values = colors) +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+      breaks = 10^seq(0, 10),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(
       title = "Bacterial growth over time",
-      x = "Time",
+      x = "Time (hours)",
       y = "Population Size",
-      color = NULL
-      fill = NULL
+      color = "Strain",
+      fill = "Strain"
     ) +
     theme_light() +
     theme(
@@ -391,6 +357,4 @@ log_plot_CI <- function(summary){
   # Display the plot
   print(plot)
 }
-
-
-log_plot(simulate_s(N0=1e5, pharmacokinetic = TRUE))
+log_plot(summarise(simulate(N0 = 1e6, rep = 10, stewardship = "comb")))
