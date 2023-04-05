@@ -302,7 +302,7 @@ summarise <- function(solutions) {
 
 log_plot <- function(summary) {
   filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
-  colors <- c("black", "#24517E", "#7e2451", "#517E24")
+  colors <- c("black", "navy", "#800000", "#008000")
   times <- unique(summary$time)
   background_df <- data.frame(
     xmin = times[-length(times)],
@@ -312,19 +312,20 @@ log_plot <- function(summary) {
     A2 = summary[summary$variable == "A2", ]$mean[-1] /
       max(summary[summary$variable == "A2", ]$mean)
   )
+  peak <- max(summary$ci_upper)
   # Create the plot
   plot <- ggplot() +
     # Add the gradient backgrounds
     geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = -2, ymax = -1, fill = A1),
+      aes(xmin = xmin, xmax = xmax, ymin = peak*10^0.2, ymax = peak*10^0.4, fill = A1),
       color = NA, alpha = 1) +
-    scale_fill_gradient(low = "white", high = "#24517E",
+    scale_fill_gradient(low = "white", high = colors[2],
       limits = c(0, 1), name = "A1", labels = NULL) +
     new_scale_fill() +
     geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = -1, ymax = 0, fill = A2),
+      aes(xmin = xmin, xmax = xmax, ymin = peak*10^0.4, ymax = peak*10^0.6, fill = A2),
       color = NA, alpha = 1) +
-    scale_fill_gradient(low = "white", high = "#7e2451",
+    scale_fill_gradient(low = "white", high = colors[3],
       limits = c(0, 1), name = "A2", labels = NULL) +
     # Add the lines
     new_scale_fill() +
@@ -354,7 +355,8 @@ log_plot <- function(summary) {
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
+    # guides(fill = guide_legend(order = 1))
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(N0 = 1e6, rep = 10, stewardship = "comb")))
+log_plot(summarise(simulate(N0 = 1e6, rep = 10, stewardship = "cycl")))
