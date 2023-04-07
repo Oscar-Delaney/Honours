@@ -322,7 +322,7 @@ log_plot <- function(summary) {
     A2 = summary[summary$variable == "A2", ]$mean[-1] /
       max(summary[summary$variable == "A2", ]$mean)
   )
-  peak <- max(summary$ci_upper)
+  peak <- max(summary$ci_upper,summary$mean, na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
     # Add the gradient backgrounds
@@ -340,7 +340,7 @@ log_plot <- function(summary) {
     # Add the lines
     new_scale_fill() +
     geom_line(data = filtered, aes(x = time, y = mean, color = variable),
-      linewidth = 1.5) +
+      size = 1.5) +
     scale_color_manual(values = colors) +
     # Add the confidence intervals
     geom_ribbon(data = filtered, alpha = 0.3,
@@ -368,4 +368,4 @@ log_plot <- function(summary) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(N0 = 1e3, rep = 10, stewardship = "cycl")))
+log_plot(summarise(simulate(N0 = 1e3, rep = 10,D=0.11, stewardship = "cycl")))
