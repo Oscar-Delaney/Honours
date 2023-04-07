@@ -4,13 +4,27 @@ library(ggnewscale)
 library(reshape2)
 library(dplyr)
 
-# a pharmacodynamic function for antibioti-induced killing of bacteria
+# a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, params) {
   psi <- params[1]
   phi <- params[2]
   zeta <- params[3]
   kappa <- params[4]
   return(phi * (A / zeta)^kappa / ((A / zeta)^kappa - (psi - phi) / psi))
+}
+
+# interaction between the two drugs
+interaction <- function(A1_death, A2_death, theta) {
+  return(theta * A1_death * A2_death)
+}
+
+# total death rate from two antibiotics with interactions
+death <- function(A1, A2, params) {
+  death1 <- hill(A1, params[c("psi","phi1","zeta1","kappa1")])
+  death2 <- hill(A2, params[c("psi","phi2","zeta2","kappa2")])
+  interaction <- interaction(death1 / params["psi"],
+    death2 / params["psi"], params["theta"])
+  return(death1 + death2 + interaction)
 }
 
 # a growth rate function for nutrient-limited growth
@@ -105,14 +119,10 @@ rates <- function(state, config, t) {
     R1_growth <- R1 * (1 - config$m2) * monod(N, params["R1", c("mu", "k")])
     R2_growth <- R2 * (1 - config$m1) * monod(N, params["R2", c("mu", "k")])
     R12_growth <- R12 * monod(N, params["R12", c("mu", "k")])
-    S_death <- S * (hill(A = A1, params["S", c("psi", "phi1", "zeta1", "kappa1")])
-      + hill(A = A2, params["S", c("psi", "phi2", "zeta2", "kappa2")]))
-    R1_death <- R1 * (hill(A = A1, params["R1", c("psi", "phi1", "zeta1", "kappa1")])
-      + hill(A = A2, params["R1", c("psi", "phi2", "zeta2", "kappa2")]))
-    R2_death <- R2 * (hill(A = A1, params["R2", c("psi", "phi1", "zeta1", "kappa1")])
-      + hill(A = A2, params["R2", c("psi", "phi2", "zeta2", "kappa2")]))
-    R12_death <- R12 * (hill(A = A1, params["R12", c("psi", "phi1", "zeta1", "kappa1")])
-      + hill(A = A2, params["R12", c("psi", "phi2", "zeta2", "kappa2")]))
+    S_death <- S * death(A1 = A1, A2 = A2, params["S", ])
+    R1_death <- R1 * death(A1 = A1, A2 = A2, params["R1", ])
+    R2_death <- R2 * death(A1 = A1, A2 = A2, params["R2", ])
+    R12_death <- R12 * death(A1 = A1, A2 = A2, params["R12", ])
     R1_mutation <- S * config$m1 * (1 - config$m2) * monod(N, params["S", c("mu", "k")])
     R2_mutation <- S * config$m2 * (1 - config$m1) * monod(N, params["S", c("mu", "k")])
     R12_mutation <- S * config$m1 * config$m2 * monod(N, params["S", c("mu", "k")]) +
@@ -231,6 +241,7 @@ simulate <- function(
   zeta2 = c(1, 1, 100, 100), # MIC drug 2
   kappa1 = c(1, 1, 1, 1), # Hill function steepness parameter drug 1
   kappa2 = c(1, 1, 1, 1), # Hill function steepness parameter drug 2
+  theta = c(0, 0, 0, 0), # drug interaction term
   mu = c(1, 1, 1, 1), # growth rate with infinite resources
   k = c(100, 100, 100, 100), # resource concentration at half-maximal growth
   alpha = c(1, 1, 1, 1) # resources used per unit growth
@@ -277,9 +288,8 @@ simulate <- function(
   } else {
     config$pattern <- c(1, 0)
   }
-  config$params <- cbind(psi, phi1, phi2, zeta1, zeta2, kappa1, kappa2, mu, k, alpha)
+  config$params <- cbind(psi, phi1, phi2, zeta1, zeta2, kappa1, kappa2, theta, mu, k, alpha)
   rownames(config$params) <- c("S", "R1", "R2", "R12")
-
   # Run the simulation rep number of times
   solutions <- lapply(1:rep, function(x) {single_run(config, x)})
   return(do.call(rbind, solutions))
@@ -317,14 +327,14 @@ log_plot <- function(summary) {
   plot <- ggplot() +
     # Add the gradient backgrounds
     geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = peak*10^0.2, ymax = peak*10^0.4, fill = A1),
-      color = NA, alpha = 1) +
+      aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.2,
+         ymax = peak * 10^0.4, fill = A1), color = NA, alpha = 1) +
     scale_fill_gradient(low = "white", high = colors[2],
       limits = c(0, 1), name = "A1", labels = NULL) +
     new_scale_fill() +
     geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = peak*10^0.4, ymax = peak*10^0.6, fill = A2),
-      color = NA, alpha = 1) +
+      aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.4,
+        ymax = peak * 10^0.6, fill = A2), color = NA, alpha = 1) +
     scale_fill_gradient(low = "white", high = colors[3],
       limits = c(0, 1), name = "A2", labels = NULL) +
     # Add the lines
@@ -358,4 +368,4 @@ log_plot <- function(summary) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(N0 = 1e6, rep = 10, stewardship = "cycl")))
+log_plot(summarise(simulate(N0 = 1e3, rep = 10, stewardship = "cycl")))
