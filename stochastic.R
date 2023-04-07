@@ -368,4 +368,4 @@ log_plot <- function(summary) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(N0 = 1e3, rep = 10,D=0.11, stewardship = "cycl")))
+log_plot(summarise(simulate(N0 = 1e3, stewardship = "comb", rep = 10, psi = c(0.1,0.01,0.1,0.1))))
