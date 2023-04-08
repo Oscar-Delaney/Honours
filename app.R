@@ -17,9 +17,11 @@ ui <- fluidPage(
                               "Combination" = "comb",
                               "Drug 1 Only" = "1_only",
                               "Drug 2 Only" = "2_only")),
-      numericInput("time", "Simulation Time (hours)", value = 50, min = 1),
-      numericInput("freq", "Bottleneck Frequency (hours)", value = 10, min = 1),
-      sliderInput("N0", "log_10 of Nutrient influx as bottleneck", value = 4,
+      sliderInput("time", "Simulation Time (hours)", value = 50,
+        min = 10, max = 100, step = 10),
+      sliderInput("freq", "Bottleneck Frequency (hours)", value = 10,
+        min = 1, max = 30, step = 1),
+      sliderInput("N0", "log_10 of Nutrient influx at bottleneck", value = 4,
         min = 1, max = 8, step = 1),
       sliderInput("D", "log_10 of Dilution fraction at bottleneck", value = -1,
         min = -5, max = 0, step = 1),
@@ -30,9 +32,9 @@ ui <- fluidPage(
       sliderInput("HGT", "recombination rate", value = -4,
         min = -9, max = -3, step = 1),
       sliderInput("cost1", "fitness cost of A1 resistance", value = 0,
-        min = 0, max = 0.1, step = 0.01),
+        min = 0, max = 0.5, step = 0.05),
       sliderInput("cost2", "fitness cost of A2 resistance", value = 0,
-        min = 0, max = 0.1, step = 0.01),
+        min = 0, max = 0.5, step = 0.05),
       sliderInput("theta", "drug-drug interaction", value = 0,
         min = -1, max = 1, step = 0.1),
       actionButton("run_simulation", "Run Simulation")
@@ -57,8 +59,8 @@ server <- function(input, output) {
       m1 = 10 ^ input$m1,
       m2 = 10 ^ input$m2,
       HGT = 10 ^ input$HGT,
-      psi = c(0.1, 0.1 - input$cost1, 0.1 - input$cost2,
-        0.1 - input$cost1 - input$cost2),
+      mu = c(1, 1 - input$cost1, 1 - input$cost2,
+        1 - input$cost1 - input$cost2),
       theta = rep(input$theta, 4)
     )
   })
@@ -74,3 +76,5 @@ server <- function(input, output) {
 
 # Run the application
 shinyApp(ui = ui, server = server)
+
+# To the deploy the app use deployApp()
