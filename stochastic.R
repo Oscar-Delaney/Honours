@@ -58,7 +58,8 @@ bottleneck <- function(state,
   influx = c(10, 10),
   cycl = FALSE,
   pharmacokinetic = FALSE,
-  deterministic = FALSE) {
+  deterministic = FALSE,
+  t=0) {
   if (cycl) {
     pattern <- update_pattern(state["prev"])
   }
@@ -76,6 +77,8 @@ bottleneck <- function(state,
     pharmacokinetic * state[c("A1", "A2")] + influx * pattern,
     state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
   state[state < 0] <- 0 # backup - shouldn't be needed
+  print(t)
+  print(state)
   return(state)
 }
 
@@ -179,7 +182,8 @@ single_run <- function(config, x) {
       influx = config$influx,
       cycl = config$stewardship == "cycl",
       pharmacokinetic = config$pharmacokinetic,
-      deterministic = config$deterministic_dilution
+      deterministic = config$deterministic_dilution,
+      t = t
     )
 
     # Update the solution
@@ -311,7 +315,8 @@ summarise <- function(solutions) {
 }
 
 log_plot <- function(summary) {
-  filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
+  # filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12","A1","A2"), ]
+  filtered <- summary
   colors <- c("black", "navy", "#800000", "#008000")
   times <- unique(summary$time)
   background_df <- data.frame(
@@ -368,4 +373,5 @@ log_plot <- function(summary) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(N0 = 1e3, stewardship = "comb", rep = 10, psi = c(0.1,0.01,0.1,0.1))))
+# log_plot(summarise(simulate(rep=2,dt =1, mu = c(0,0,0,1))))
+# plot(simulate(rep=2)[,c("time","A1","A2")])
