@@ -58,8 +58,7 @@ bottleneck <- function(state,
   influx = c(10, 10),
   cycl = FALSE,
   pharmacokinetic = FALSE,
-  deterministic = FALSE,
-  t=0) {
+  deterministic = FALSE) {
   if (cycl) {
     pattern <- update_pattern(state["prev"])
   }
@@ -180,8 +179,7 @@ single_run <- function(config, x) {
       influx = config$influx,
       cycl = config$stewardship == "cycl",
       pharmacokinetic = config$pharmacokinetic,
-      deterministic = config$deterministic_dilution,
-      t = t
+      deterministic = config$deterministic_dilution
     )
 
     # Update the solution
@@ -316,7 +314,6 @@ summarise <- function(solutions) {
 
 log_plot <- function(summary) {
   filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
-  # filtered <- summary
   colors <- c("black", "navy", "#800000", "#008000")
   times <- unique(summary$time)
   background_df <- data.frame(
