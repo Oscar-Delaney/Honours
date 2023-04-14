@@ -77,8 +77,6 @@ bottleneck <- function(state,
     pharmacokinetic * state[c("A1", "A2")] + influx * pattern,
     state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
   state[state < 0] <- 0 # backup - shouldn't be needed
-  # print(t)
-  # print(state)
   return(state)
 }
 
@@ -204,8 +202,10 @@ single_run <- function(config, x) {
     R2 = approx(solution$time, solution$R2, xout = config$time_grid)$y,
     R12 = approx(solution$time, solution$R12, xout = config$time_grid)$y,
     N = approx(solution$time, solution$N, xout = config$time_grid)$y,
-    A1 = approx(solution$time, solution$A1, xout = config$time_grid)$y,
-    A2 = approx(solution$time, solution$A2, xout = config$time_grid)$y,
+    A1 = approx(solution$time, solution$A1, xout = config$time_grid,
+      method = "constant", f = 1)$y,
+    A2 = approx(solution$time, solution$A2, xout = config$time_grid,
+      method = "constant", f = 1)$y,
     rep = x
   )
   return(solution)
@@ -373,5 +373,4 @@ log_plot <- function(summary) {
   # Display the plot
   print(plot)
 }
-# log_plot(summarise(simulate(rep=10,N0=1e5, stewardship = "comb", theta = c(-1,-1,-1,-1))))
-# plot(simulate(rep=2)[,c("time","A1","A2")])
+log_plot(summarise(simulate(N0=1e5, stewardship = "cycl", mu = c(0,1,1,1))))
