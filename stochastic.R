@@ -307,14 +307,29 @@ summarise <- function(solutions) {
       sd = sd(value),
       se = sd / sqrt(n()),
       ci_lower = max(0, mean - 1.96 * se),
-      ci_upper = mean + 1.96 * se
+      ci_upper = mean + 1.96 * se,
+      median = median(value),
+      IQR_lower = quantile(value, 0.25),
+      IQR_upper = quantile(value, 0.75)
     )
   return(summary)
 }
 
-log_plot <- function(summary) {
+log_plot <- function(summary, IQR = TRUE) {
   filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
+  # Choose the type of central tendency and range to plot
+  if (IQR) {
+    filtered$central <- filtered$median
+    filtered$lower <- filtered$IQR_lower
+    filtered$upper <- filtered$IQR_upper
+  } else {
+    filtered$central <- filtered$mean
+    filtered$lower <- filtered$ci_lower
+    filtered$upper <- filtered$ci_upper
+  }
+  # Initialise the colours 
   colors <- c("black", "navy", "#800000", "#008000")
+  # Create antibiotic concentrations data frame
   times <- unique(summary$time)
   background_df <- data.frame(
     xmin = times[-length(times)],
@@ -324,7 +339,7 @@ log_plot <- function(summary) {
     A2 = summary[summary$variable == "A2", ]$mean[-1] /
       max(summary[summary$variable == "A2", ]$mean)
   )
-  peak <- max(summary$ci_upper,summary$mean, na.rm = TRUE)
+  peak <- max(summary$ci_upper, summary$mean, na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
     # Add the gradient backgrounds
@@ -341,12 +356,12 @@ log_plot <- function(summary) {
       limits = c(0, 1), name = "A2", labels = NULL) +
     # Add the lines
     new_scale_fill() +
-    geom_line(data = filtered, aes(x = time, y = mean, color = variable),
+    geom_line(data = filtered, aes(x = time, y = central, color = variable),
       size = 1.5) +
     scale_color_manual(values = colors) +
     # Add the confidence intervals
     geom_ribbon(data = filtered, alpha = 0.3,
-      aes(x = time, ymin = ci_lower, ymax = ci_upper, fill = variable)) +
+      aes(x = time, ymin = lower, ymax = upper, fill = variable)) +
     scale_fill_manual(values = colors) +
     scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
       breaks = 10^seq(0, 10),
@@ -370,4 +385,4 @@ log_plot <- function(summary) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(N0=1e5, stewardship = "cycl", mu = c(0,1,1,1))))
+log_plot(summarise(simulate(rep=20,N0=1e3)),IQR=FALSE)

@@ -17,6 +17,9 @@ ui <- fluidPage(
                               "Combination" = "comb",
                               "Drug 1 Only" = "1_only",
                               "Drug 2 Only" = "2_only")),
+      selectInput("display", "Uncertainty Display",
+                  choices = c("Median + 25th and 75th percentiles" = TRUE,
+                              "Mean + 95% confidence interval" = FALSE)),
       sliderInput("time", "Simulation Time (hours)", value = 50,
         min = 10, max = 100, step = 10),
       sliderInput("freq", "Bottleneck Frequency (hours)", value = 10,
@@ -69,7 +72,7 @@ server <- function(input, output) {
     # Check if the simulation_result has been executed
     if (!is.null(simulation_result())) {
       # Create a plot of the simulation results
-      log_plot(summarise(simulation_result()))
+      log_plot(summarise(simulation_result()), IQR = input$display)
     }
   })
 }
@@ -77,4 +80,4 @@ server <- function(input, output) {
 # Run the application
 shinyApp(ui = ui, server = server)
 
-# To the deploy the app use deployApp()
+# To deploy the app use deployApp()
