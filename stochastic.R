@@ -385,4 +385,4 @@ log_plot <- function(summary, IQR = TRUE) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(rep=20,N0=1e3)),IQR=FALSE)
+# log_plot(summarise(simulate(rep=20,N0=1e3)),IQR=FALSE)

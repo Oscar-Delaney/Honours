@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyMatrix)
 library(rsconnect)
 
 # Load the stochastic.R file
