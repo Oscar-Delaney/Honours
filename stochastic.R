@@ -179,7 +179,7 @@ single_run <- function(config, x) {
       influx = config$influx,
       cycl = config$stewardship == "cycl",
       pharmacokinetic = config$pharmacokinetic,
-      deterministic = config$deterministic_dilution
+      deterministic = config$deterministic[1]
     )
 
     # Update the solution
@@ -215,13 +215,9 @@ simulate <- function(
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   deterministic = c(
-    growth = FALSE,
-    death = FALSE,
-    mutation = FALSE,
-    HGT = FALSE,
-    drug_depletion = FALSE,
-    nutrient_depletion = FALSE,
-    dilution = FALSE
+    bacteria = FALSE,
+    drugs = FALSE,
+    nutrients = FALSE
   ), # vector of logicals indicating which transitions should be deterministic
   time = 50, # time to simulate, in hours
   dt = 0.01, # time step, in hours
@@ -263,25 +259,29 @@ simulate <- function(
     pharmacokinetic = pharmacokinetic,
     freq = freq,
     time_grid = seq(0, time, by = dt), # a common time grid for all runs
-    deterministic_dilution = deterministic["dilution"],
-    deterministic = c(
-      S_growth = deterministic["growth"],
-      R1_growth = deterministic["growth"],
-      R2_growth = deterministic["growth"],
-      R12_growth = deterministic["growth"],
-      S_death = deterministic["death"],
-      R1_death = deterministic["death"],
-      R2_death = deterministic["death"],
-      R12_death = deterministic["death"],
-      R1_mutation = deterministic["mutation"],
-      R2_mutation = deterministic["mutation"],
-      R12_mutation = deterministic["mutation"],
-      HGT_MDR_loss = deterministic["HGT"],
-      HGT_MDR_gain = deterministic["HGT"],
-      A1_depletion = deterministic["drug_depletion"],
-      A2_depletion = deterministic["drug_depletion"],
-      N_depletion = deterministic["nutrient_depletion"]
+    # deterministic_bottleneck = deterministic["bottleneck"],
+    deterministic = c(rep(deterministic["bacteria"], 13),
+      rep(deterministic["drugs"], 2),
+      deterministic["nutrients"]
     )
+    # deterministic = c(
+    #   S_growth = deterministic["growth"],
+    #   R1_growth = deterministic["growth"],
+    #   R2_growth = deterministic["growth"],
+    #   R12_growth = deterministic["growth"],
+    #   S_death = deterministic["death"],
+    #   R1_death = deterministic["death"],
+    #   R2_death = deterministic["death"],
+    #   R12_death = deterministic["death"],
+    #   R1_mutation = deterministic["mutation"],
+    #   R2_mutation = deterministic["mutation"],
+    #   R12_mutation = deterministic["mutation"],
+    #   HGT_MDR_loss = deterministic["HGT"],
+    #   HGT_MDR_gain = deterministic["HGT"],
+    #   A1_depletion = deterministic["drug_depletion"],
+    #   A2_depletion = deterministic["drug_depletion"],
+    #   N_depletion = deterministic["nutrient_depletion"]
+    # )
   )
   if (stewardship == "2_only") {
     config$pattern <- c(0, 1)
@@ -385,4 +385,9 @@ log_plot <- function(summary, IQR = TRUE) {
   # Display the plot
   print(plot)
 }
-# log_plot(summarise(simulate(rep=20,N0=1e3)),IQR=FALSE)
+log_plot(summarise(simulate(rep=2,N0=1e3, freq = 10,
+deterministic = c(
+  bacteria = F,
+  drug = F,
+  nutrient = F
+  ))),IQR=FALSE)
