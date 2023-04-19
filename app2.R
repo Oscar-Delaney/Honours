@@ -1,13 +1,46 @@
 library(shiny)
 library(shinyMatrix)
+library(shinyjs)
 library(rsconnect)
 
 # Load the stochastic.R file
 source("stochastic.R")
 
+# Default values
+drugs_default <- matrix(c(
+    -1, -1, # log_10 mutation rates
+    -1, -1, # log_10 drug elimination rates
+    10, 10 # drug influx concentrations
+    ), nrow = 2, ncol = 3, dimnames = list(c("A1", "A2"),
+        c("mutation_rate", "elimination_rate", "influx")))
+
+growth_default <- matrix(c(
+    1e2, 0, 0, 0, # init: initial populations
+    1, 1, 1, 1, # mu: growth rates
+    1e2, 1e2, 1e2, 1e2, # k: half-maximal growth rates
+    1, 1, 1, 1 # alpha: resources used per unit growth
+    ), nrow = 4, ncol = 4,
+    dimnames = list(c("S", "R1", "R2", "R12"),
+        c("init", "mu", "k", "alpha")))
+
+pd_default <- matrix(c(
+    0.1, 0.1, 0.1, 0.1, # psi
+    0.2, 0.2, 0.2, 0.2, # phi1
+    1, 100, 1, 100, # zeta1
+    1, 1, 1, 1, # kappa1
+    0.2, 0.2, 0.2, 0.2, # phi2
+    1, 1, 100, 100, # zeta2
+    1, 1, 1, 1, # kappa2
+    0, 0, 0, 0 # theta
+    ), nrow = 4, ncol = 8,
+    dimnames = list(c("S", "R1", "R2", "R12"),
+    c("psi", "phi1", "zeta1", "kappa1", "phi2", "zeta2", "kappa2", "theta")))
+
 # UI
 ui <- fluidPage(
+  useShinyjs(),
   titlePanel("Stochastic Simulation of Antibiotic Resistance"),
+  div(id = "everything",
   mainPanel(
     tabsetPanel(
       tabPanel("Basic",
@@ -34,18 +67,12 @@ ui <- fluidPage(
                    sliderInput("HGT", "log_10 of recombination rate",
                     value = -4, min = -9, max = -3, step = 1)
                  ))
-               ),
-               actionButton("run_simulation", "Run Simulation")
+               )
       ),
       tabPanel("Drugs",
                fluidRow(
                  column(12, wellPanel(
-                    matrixInput("drugs", value = matrix(c(
-                        -1, -1, # log_10 mutation rates
-                        -1, -1, # log_10 drug elimination rates
-                        10, 10 # drug influx concentrations
-                    ), nrow = 2, ncol = 3, dimnames = list(c("A1", "A2"),
-                         c("mutation_rate", "elimination_rate", "influx"))),
+                    matrixInput("drugs", value = drugs_default,
                     rows = list(extend = FALSE, names = TRUE),
                     cols = list(extend = FALSE, names = TRUE),
                     class = "numeric")
@@ -54,15 +81,7 @@ ui <- fluidPage(
       tabPanel("Growth & Bottlenecks",
          fluidRow(
            column(6, wellPanel(
-            matrixInput("growth", value = matrix(c(
-                1e2, 0, 0, 0, # init: initial populations
-                1, 1, 1, 1, # mu: growth rates
-                1e2, 1e2, 1e2, 1e2, # k: half-maximal growth rates
-                1, 1, 1, 1 # alpha: resources used per unit growth
-                ), nrow = 4, ncol = 4,
-                dimnames = list(
-                    c("S", "R1", "R2", "R12"),
-                    c("init", "mu", "k", "alpha"))),
+            matrixInput("growth", value = growth_default,
             rows = list(extend = FALSE, names = TRUE),
             cols = list(extend = FALSE, names = TRUE),
             class = "numeric")
@@ -79,19 +98,7 @@ ui <- fluidPage(
          fluidRow(
            column(12, wellPanel(
              matrixInput("pd",
-                         value = matrix(c(
-                            0.1, 0.1, 0.1, 0.1, # psi
-                            0.2, 0.2, 0.2, 0.2, # phi1
-                            1, 100, 1, 100, # zeta1
-                            1, 1, 1, 1, # kappa1
-                            0.2, 0.2, 0.2, 0.2, # phi2
-                            1, 1, 100, 100, # zeta2
-                            1, 1, 1, 1, # kappa2
-                            0, 0, 0, 0 # theta
-                         ), nrow = 4, ncol = 8,
-                         dimnames = list(c("S", "R1", "R2", "R12"),
-                                         c("psi", "phi1", "zeta1", "kappa1",
-                                         "phi2", "zeta2", "kappa2", "theta"))),
+                         value = pd_default,
                          rows = list(extend = FALSE, names = TRUE),
                          cols = list(extend = FALSE, names = TRUE),
                          class = "numeric")
@@ -99,10 +106,12 @@ ui <- fluidPage(
       # Add other tabs here
     ),
     plotOutput("simulation_plot")
-  )
+  )),
+               actionButton("run_simulation", "Run Simulation"),
+               actionButton("reset_all", "Reset all parameters to defaults")
 )
 
-server <- function(input, output) {
+server <- function(input, output, session) {
   # Create a reactive expression for the simulation results
   simulation_result <- eventReactive(input$run_simulation, {
     simulate(
@@ -139,9 +148,17 @@ server <- function(input, output) {
     # Check if the simulation_result has been executed
     if (!is.null(simulation_result())) {
       # Create a plot of the simulation results
-      log_plot(summarise(simulation_result()))#, IQR = input$display)
+      log_plot(summarise(simulation_result()), IQR = input$display)
     }
   })
+  # add code to reset all parameters to defaults
+    observeEvent(input$reset_all, {
+        shinyjs::reset("everything")
+        # update the matrices to use default values
+        updateMatrixInput(session, inputId = "drugs", value = drugs_default)
+        updateMatrixInput(session, inputId = "growth", value = growth_default)
+        updateMatrixInput(session, inputId = "pd", value = pd_default)
+    })
 }
 
 # Run the application
