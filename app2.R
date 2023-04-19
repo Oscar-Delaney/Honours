@@ -6,6 +6,34 @@ library(rsconnect)
 # Load the stochastic.R file
 source("stochastic.R")
 
+# Explanatory text
+basic_text <- "This is a model describing the evolution of antibiotic resistance
+in a bacterial population. It uses the Adaptive Tau package to stochastify
+an ODE model. For details see Delaney, Engelstaedter, and Letten (forthcoming).
+Contact Oscar Delaney on o.delaney@uq.net.au with any errors or suggestions."
+
+drugs_text <- "A1 and A2 are arbitrary antibiotics. The mutation rate
+is the log base 10 of the proportion of genome replications that result in
+resistance to that drug. The elimination rate is the log base 10 of the
+rate at which the drug is eliminated from the body. This is only used if
+the pharmacokinetic model is selected. The influx is the concentration of
+each drug added at bottleneck event."
+
+growth_text <- "The rows represent four bacterial strains: Susceptible, 
+Antibiotic_1 resistant, Antibiotic_2 resistant, and double resistant. 
+init is the starting population size of each straing. Mu is the growth
+rate with unlimited nutrients. K is the nutrient concentration that produces 
+half-maximal growth rate. alpha is the amount of nutrient used per new
+bacterial cell."
+
+pd_text <- "Psi is the growth rate in the absence of antibiotics.
+Phi_i is the maximum reduction in growth rate caused by antibiotic i.
+Zeta_i is the minimum inhibitory concentration of antibiotic i.
+Kappa_i is the shape parameter, with smaller values representing a
+shallower reduction in growth rate as antibiotic concentration increases, and 
+larger values representing a steeper reduction in growth rate around the MIC.
+Theta is the drug-drug interaction parameter, with values between -1 and 1."
+
 # Default values
 drugs_default <- matrix(c(
     -1, -1, # log_10 mutation rates
@@ -13,7 +41,7 @@ drugs_default <- matrix(c(
     10, 10 # drug influx concentrations
 ), nrow = 2, ncol = 3, dimnames = list(
     c("A1", "A2"),
-    c("mutation_rate", "elimination_rate", "influx")
+    c("Mutation rate", "Elimination rate", "Influx")
 ))
 
 growth_default <- matrix(
@@ -26,7 +54,7 @@ growth_default <- matrix(
     nrow = 4, ncol = 4,
     dimnames = list(
         c("S", "R1", "R2", "R12"),
-        c("init", "mu", "k", "alpha")
+        c("Init", "Mu", "K", "Alpha")
     )
 )
 
@@ -44,7 +72,7 @@ pd_default <- matrix(
     nrow = 4, ncol = 8,
     dimnames = list(
         c("S", "R1", "R2", "R12"),
-        c("psi", "phi1", "zeta1", "kappa1", "phi2", "zeta2", "kappa2", "theta")
+        c("Psi", "Phi1", "Zeta1", "Kappa1", "Phi2", "Zeta2", "Kappa2", "Theta")
     )
 )
 
@@ -52,6 +80,10 @@ pd_default <- matrix(
 ui <- fluidPage(
     useShinyjs(),
     titlePanel("Stochastic Simulation of Antibiotic Resistance"),
+    p(
+    actionButton("run_simulation", "Run Simulation"),
+    actionButton("reset_all", "Reset all parameters to defaults")
+    ),
     div(
         id = "everything",
         mainPanel(
@@ -60,8 +92,8 @@ ui <- fluidPage(
                     "Basic",
                     fluidRow(
                         column(6, wellPanel(
+                            p(basic_text),
                             numericInput("rep", "Number of Runs", value = 10, min = 1, step = 1),
-                            checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE),
                             selectInput("stewardship", "Antibiotic Stewardship Strategy",
                                 choices = c(
                                     "Cycling" = "cycl",
@@ -69,7 +101,8 @@ ui <- fluidPage(
                                     "Drug 1 Only" = "1_only",
                                     "Drug 2 Only" = "2_only"
                                 )
-                            )
+                            ),
+                            checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE)
                         )),
                         column(6, wellPanel(
                             sliderInput("time", "Simulation Time (hours)",
@@ -91,6 +124,7 @@ ui <- fluidPage(
                     "Drugs",
                     fluidRow(
                         column(12, wellPanel(
+                            p(drugs_text),
                             matrixInput("drugs",
                                 value = drugs_default,
                                 rows = list(extend = FALSE, names = TRUE),
@@ -104,6 +138,7 @@ ui <- fluidPage(
                     "Growth & Bottlenecks",
                     fluidRow(
                         column(6, wellPanel(
+                            p(growth_text),
                             matrixInput("growth",
                                 value = growth_default,
                                 rows = list(extend = FALSE, names = TRUE),
@@ -125,6 +160,7 @@ ui <- fluidPage(
                     "Pharmacodynamics",
                     fluidRow(
                         column(12, wellPanel(
+                            p(pd_text),
                             matrixInput("pd",
                                 value = pd_default,
                                 rows = list(extend = FALSE, names = TRUE),
@@ -145,9 +181,7 @@ ui <- fluidPage(
                 selected = TRUE
             )
         )
-    ),
-    actionButton("run_simulation", "Run Simulation"),
-    actionButton("reset_all", "Reset all parameters to defaults")
+    )
 )
 
 server <- function(input, output, session) {
@@ -163,23 +197,23 @@ server <- function(input, output, session) {
             N0 = round(10^input$N0),
             D = 10^input$D,
             HGT = 10^input$HGT,
-            m1 = 10^input$drugs["A1", "mutation_rate"],
-            m2 = 10^input$drugs["A2", "mutation_rate"],
-            d1 = input$pharmacokinetic * 10^input$drugs["A1", "elimination_rate"],
-            d2 = input$pharmacokinetic * 10^input$drugs["A2", "elimination_rate"],
-            influx = setNames(input$drugs[, "influx"], c("A1", "A2")),
-            init = setNames(input$growth[, c("init")], c("S", "R1", "R2", "R12")),
-            psi = input$pd[, "psi"],
-            phi1 = input$pd[, "phi1"],
-            zeta1 = input$pd[, "zeta1"],
-            kappa1 = input$pd[, "kappa1"],
-            phi2 = input$pd[, "phi2"],
-            zeta2 = input$pd[, "zeta2"],
-            kappa2 = input$pd[, "kappa2"],
-            theta = input$pd[, "theta"],
-            mu = input$growth[, "mu"],
-            k = input$growth[, "k"],
-            alpha = input$growth[, "alpha"]
+            m1 = 10^input$drugs["A1", "Mutation rate"],
+            m2 = 10^input$drugs["A2", "Mutation rate"],
+            d1 = input$pharmacokinetic * 10^input$drugs["A1", "Elimination rate"],
+            d2 = input$pharmacokinetic * 10^input$drugs["A2", "Elimination rate"],
+            influx = setNames(input$drugs[, "Influx"], c("A1", "A2")),
+            init = setNames(input$growth[, c("Init")], c("S", "R1", "R2", "R12")),
+            psi = input$pd[, "Psi"],
+            phi1 = input$pd[, "Phi1"],
+            zeta1 = input$pd[, "Zeta1"],
+            kappa1 = input$pd[, "Kappa1"],
+            phi2 = input$pd[, "Phi2"],
+            zeta2 = input$pd[, "Zeta2"],
+            kappa2 = input$pd[, "Kappa2"],
+            theta = input$pd[, "Theta"],
+            mu = input$growth[, "Mu"],
+            k = input$growth[, "K"],
+            alpha = input$growth[, "Alpha"]
         ))
     })
 

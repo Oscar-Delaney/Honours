@@ -57,25 +57,18 @@ bottleneck <- function(state,
   N0 = 100,
   influx = c(10, 10),
   cycl = FALSE,
-  pharmacokinetic = FALSE,
-  deterministic = FALSE) {
+  pharmacokinetic = FALSE) {
   if (cycl) {
     pattern <- update_pattern(state["prev"])
   }
-  # if deterministic then dilute the population by a factor of D
-  # else use a binomial distribution to model dilution
   populations <- state[c("S", "R1", "R2", "R12")]
-  if (deterministic) {
-    diluted <- populations * D
-  } else {
-    diluted <- rbinom(length(populations), populations, D)
-    # set the names of the diluted populations
-    names(diluted) <- c("S", "R1", "R2", "R12")
-  }
+  diluted <- rbinom(length(populations), populations, D)
   state <- c(diluted, N = N0,
     pharmacokinetic * state[c("A1", "A2")] + influx * pattern,
     state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
   state[state < 0] <- 0 # backup - shouldn't be needed
+  # set the names of the state variables
+  names(state) <- c("S", "R1", "R2", "R12", "N", "A1", "A2", "prev")
   return(state)
 }
 
@@ -167,7 +160,7 @@ single_run <- function(config, x) {
   while (t < max(config$time_grid)) {
     # Run the model between bottlenecks
     new_solution <- ssa.adaptivetau(state, transitions, rates, config,
-      tf = config$freq, deterministic = config$deterministic)
+      tf = config$freq)
     # Make the time column reflect the overall time accurately
     new_solution[, 1] <- new_solution[, 1] + t
     # Run the bottleneck and update the state
@@ -178,8 +171,7 @@ single_run <- function(config, x) {
       N0 = config$N0,
       influx = config$influx,
       cycl = config$stewardship == "cycl",
-      pharmacokinetic = config$pharmacokinetic,
-      deterministic = config$deterministic[1]
+      pharmacokinetic = config$pharmacokinetic
     )
 
     # Update the solution
@@ -214,11 +206,6 @@ simulate <- function(
   rep = 1,
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
-  deterministic = c(
-    bacteria = FALSE,
-    drugs = FALSE,
-    nutrients = FALSE
-  ), # vector of logicals indicating which transitions should be deterministic
   time = 50, # time to simulate, in hours
   dt = 0.01, # time step, in hours
   freq = 10, # frequency of bottlenecks, in hours
@@ -258,30 +245,7 @@ simulate <- function(
     stewardship = stewardship,
     pharmacokinetic = pharmacokinetic,
     freq = freq,
-    time_grid = seq(0, time, by = dt), # a common time grid for all runs
-    # deterministic_bottleneck = deterministic["bottleneck"],
-    deterministic = c(rep(deterministic["bacteria"], 13),
-      rep(deterministic["drugs"], 2),
-      deterministic["nutrients"]
-    )
-    # deterministic = c(
-    #   S_growth = deterministic["growth"],
-    #   R1_growth = deterministic["growth"],
-    #   R2_growth = deterministic["growth"],
-    #   R12_growth = deterministic["growth"],
-    #   S_death = deterministic["death"],
-    #   R1_death = deterministic["death"],
-    #   R2_death = deterministic["death"],
-    #   R12_death = deterministic["death"],
-    #   R1_mutation = deterministic["mutation"],
-    #   R2_mutation = deterministic["mutation"],
-    #   R12_mutation = deterministic["mutation"],
-    #   HGT_MDR_loss = deterministic["HGT"],
-    #   HGT_MDR_gain = deterministic["HGT"],
-    #   A1_depletion = deterministic["drug_depletion"],
-    #   A2_depletion = deterministic["drug_depletion"],
-    #   N_depletion = deterministic["nutrient_depletion"]
-    # )
+    time_grid = seq(0, time, by = dt) # a common time grid for all runs
   )
   if (stewardship == "2_only") {
     config$pattern <- c(0, 1)
@@ -385,8 +349,4 @@ log_plot <- function(summary, IQR = TRUE) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(rep=10,N0=1e5, deterministic = c(
-  bacteria = T,
-  drugs = F,
-  nutrients = F
-))),IQR=FALSE)
+# log_plot(summarise(simulate(rep=10,N0=1e5)),IQR=FALSE)
