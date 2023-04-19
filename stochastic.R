@@ -385,9 +385,8 @@ log_plot <- function(summary, IQR = TRUE) {
   # Display the plot
   print(plot)
 }
-log_plot(summarise(simulate(rep=2,N0=1e3, freq = 10,
-deterministic = c(
-  bacteria = F,
-  drug = F,
-  nutrient = F
-  ))),IQR=FALSE)
+log_plot(summarise(simulate(rep=10,N0=1e5, deterministic = c(
+  bacteria = T,
+  drugs = F,
+  nutrients = F
+))),IQR=FALSE)
