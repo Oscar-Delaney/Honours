@@ -3,6 +3,8 @@ library(ggplot2)
 library(ggnewscale)
 library(reshape2)
 library(dplyr)
+library(matrixStats)
+library(profvis)
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, params) {
@@ -272,10 +274,14 @@ summarise <- function(solutions) {
       se = sd / sqrt(n()),
       ci_lower = max(0, mean - 1.96 * se),
       ci_upper = mean + 1.96 * se,
-      median = median(value),
-      IQR_lower = quantile(value, 0.25),
-      IQR_upper = quantile(value, 0.75)
-    )
+      IQR_bounds = quantile(value, c(0.25, 0.5, 0.75))
+    ) %>%
+    mutate(
+      IQR_lower = IQR_bounds[[1]], # Assign the first element (0.25 quantile)
+      median = IQR_bounds[[2]], # Assign the second element (0.5 quantile)
+      IQR_upper = IQR_bounds[[3]]  # Assign the third element (0.75 quantile)
+    ) %>%
+    select(-IQR_bounds) # Remove the IQR_bounds column
   return(summary)
 }
 
@@ -349,4 +355,9 @@ log_plot <- function(summary, IQR = TRUE) {
   # Display the plot
   print(plot)
 }
-# log_plot(summarise(simulate(rep=10,N0=1e5)),IQR=FALSE)
+
+# profvis({
+#   simulations <- simulate(rep = 50, N0 = 1e5, dt = 1)
+#   summary <- summarise(simulations)
+#   log_plot(summary, IQR = T)
+# })

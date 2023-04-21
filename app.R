@@ -102,20 +102,15 @@ ui <- fluidPage(
                                     "Drug 2 Only" = "2_only"
                                 )
                             ),
-                            checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE)
-                        )),
-                        column(6, wellPanel(
+                            checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE),
                             sliderInput("time", "Simulation Time (hours)",
-                                value = 50, min = 10, max = 100, step = 10
-                            ),
-                            sliderInput("freq", "Bottleneck Frequency (hours)",
-                                value = 10, min = 1, max = 30, step = 1
+                                value = 50, min = 10, max = 100, step = 1
                             ),
                             sliderInput("dt", "log_10 of time between data points (hours)",
-                                value = -1, min = -3, max = 0, step = 1
+                                value = -1, min = -3, max = 0, step = 0.1
                             ),
                             sliderInput("HGT", "log_10 of recombination rate",
-                                value = -4, min = -9, max = -3, step = 1
+                                value = -4, min = -9, max = -3, step = 0.1
                             )
                         ))
                     )
@@ -123,7 +118,7 @@ ui <- fluidPage(
                 tabPanel(
                     "Drugs",
                     fluidRow(
-                        column(12, wellPanel(
+                        column(6, wellPanel(
                             p(drugs_text),
                             matrixInput("drugs",
                                 value = drugs_default,
@@ -135,7 +130,7 @@ ui <- fluidPage(
                     )
                 ),
                 tabPanel(
-                    "Growth & Bottlenecks",
+                    "Growth",
                     fluidRow(
                         column(6, wellPanel(
                             p(growth_text),
@@ -146,12 +141,20 @@ ui <- fluidPage(
                                 class = "numeric"
                             )
                         )),
+                    )
+                ),
+                tabPanel(
+                    "Bottlenecks",
+                    fluidRow(
                         column(6, wellPanel(
+                            sliderInput("freq", "Bottleneck Frequency (hours)",
+                                value = 10, min = 1, max = 30, step = 1
+                            ),
                             sliderInput("N0", "log_10 of Nutrient influx at bottleneck",
-                                value = 4, min = 1, max = 8, step = 1
+                                value = 4, min = 1, max = 8, step = 0.1
                             ),
                             sliderInput("D", "log_10 of Dilution fraction at bottleneck",
-                                value = -1, min = -5, max = 0, step = 1
+                                value = -1, min = -5, max = 0, step = 0.1
                             )
                         ))
                     )
@@ -169,16 +172,19 @@ ui <- fluidPage(
                             )
                         ))
                     )
+                ),
+                tabPanel(
+                    "Graph",
+                    radioButtons("display", "Uncertainty Display",
+                        choices = c(
+                            "Median + 25th and 75th percentiles" = TRUE,
+                            "Mean + 95% confidence interval" = FALSE
+                        ),
+                        selected = TRUE
+                    ),
+                    plotOutput("simulation_plot")
                 )
                 # Add other tabs here
-            ),
-            plotOutput("simulation_plot"),
-            radioButtons("display", "Uncertainty Display",
-                choices = c(
-                    "Median + 25th and 75th percentiles" = TRUE,
-                    "Mean + 95% confidence interval" = FALSE
-                ),
-                selected = TRUE
             )
         )
     )
