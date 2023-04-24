@@ -192,6 +192,10 @@ single_run <- function(config, x) {
   }
   # Interpolate the solution to the common time grid
   solution <- as.data.frame(solution)
+  # print(length(solution$time))
+  # duplicated_time_values <- solution[duplicated(solution$time), ]
+  # print(duplicated_time_values)
+  # plot(solution$time)
   solution <- data.frame(
     time = config$time_grid,
     S = approx(solution$time, solution$S, xout = config$time_grid)$y,
@@ -349,7 +353,7 @@ log_plot <- function(solutions, type = "mean") {
     scale_linetype_manual(values = rep("solid", max(filtered$rep))) +
     guides(linetype = "none") +
     scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-      breaks = 10^seq(0, 10),
+      breaks = 10^seq(0, 20),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(
       title = "Bacterial growth over time",
@@ -378,4 +382,4 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(rep = 3, N0 = 1e5, dt = 0.01, init = c(S = 1e5, R1 = 0, R2 = 0, R12 = 0)), type = "mean"))
+# system.time(log_plot(simulate(rep = 3, m1 = 1e-9, m2 = 1e-9, N0 = 1e15, dt = 0.01, init = c(S = 1e10, R1 = 0, R2 = 0, R12 = 0)), type = "mean"))

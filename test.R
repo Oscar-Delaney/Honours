@@ -33,43 +33,7 @@ error = function(e) {
 }
 )
 
-log_plot <- function(solutions) {
-  long_data <- melt(solutions, id.vars = c("time","rep"), 
-                  measure.vars = c("S", "R1", "R2", "R12"),
-                  variable.name = "variable", value.name = "value")
-  # Initialise the colours 
-  colors <- c("black", "navy", "#800000", "#008000")
-  # Create antibiotic concentrations data frame
-  times <- unique(solutions$time)
-  background_df <- data.frame(
-    xmin = times[-length(times)],
-    xmax = times[-1],
-    A1 = solutions[solutions$rep == 1, ]$A1[-1] /
-      max(solutions[solutions$rep == 1, ]$A1),
-    A2 = solutions[solutions$rep == 1, ]$A2[-1] /
-      max(solutions[solutions$rep == 1, ]$A2)
-  )
-  peak <- max(long_data$value, na.rm = TRUE)
-  # Create the plot
-  plot <- ggplot() +
-    # Add the gradient backgrounds
-    geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.2,
-         ymax = peak * 10^0.4, fill = A1), color = NA, alpha = 1) +
-    scale_fill_gradient(low = "white", high = colors[2],
-      limits = c(0, 1), name = "A1", labels = NULL) +
-    new_scale_fill() +
-    geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.4,
-        ymax = peak * 10^0.6, fill = A2), color = NA, alpha = 1) +
-    scale_fill_gradient(low = "white", high = colors[3],
-      limits = c(0, 1), name = "A2", labels = NULL) +
-    # Add the lines
-    new_scale_fill() +
-    # long_data, aes(x = time, y = value, color = variable, linetype = factor(rep))
-    geom_line(data = long_data, aes(x = time, y = value, color = variable, linetype = factor(rep)),
-      linewidth = 1.5) +
-    scale_color_manual(values = colors) +
-    scale_linetype_manual(values = rep("solid",max(solutions$rep))) +
-    if (TRUE) {
-    guides(linetype = "none") + }
+
+  print(length(solution$time))
+  duplicated_time_values <- solution$time[duplicated(solution$time)]
+  print(duplicated_time_values)

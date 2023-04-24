@@ -36,7 +36,7 @@ Theta is the drug-drug interaction parameter, with values between -1 and 1."
 
 # Default values
 drugs_default <- matrix(c(
-    -1, -1, # log_10 mutation rates
+    -9, -9, # log_10 mutation rates
     -1, -1, # log_10 drug elimination rates
     10, 10 # drug influx concentrations
 ), nrow = 2, ncol = 3, dimnames = list(
@@ -46,7 +46,7 @@ drugs_default <- matrix(c(
 
 growth_default <- matrix(
     c(
-        1e2, 0, 0, 0, # init: initial populations
+        1e10, 0, 0, 0, # init: initial populations
         1, 1, 1, 1, # mu: growth rates
         1e2, 1e2, 1e2, 1e2, # k: half-maximal growth rates
         1, 1, 1, 1 # alpha: resources used per unit growth
@@ -149,10 +149,10 @@ ui <- fluidPage(
                                 value = 10, min = 1, max = 30, step = 1
                             ),
                             sliderInput("N0", "log_10 of Nutrient influx at bottleneck",
-                                value = 4, min = 1, max = 8, step = 0.1
+                                value = 10, min = 2, max = 20, step = 0.1
                             ),
                             sliderInput("D", "log_10 of Dilution fraction at bottleneck",
-                                value = -1, min = -5, max = 0, step = 0.1
+                                value = -2, min = -5, max = 0, step = 0.1
                             )
                         ))
                     )
