@@ -3,6 +3,7 @@ library(ggplot2)
 library(ggnewscale)
 library(reshape2)
 library(dplyr)
+library(purrr)
 library(matrixStats)
 library(profvis)
 
@@ -268,18 +269,19 @@ summarise <- function(solutions) {
   melted <- melt(solutions, id.vars = c("time", "rep"))
   summary <- melted %>%
     group_by(time, variable) %>%
-    summarize(
+    reframe(
       mean = mean(value),
       sd = sd(value),
       se = sd / sqrt(n()),
       ci_lower = max(0, mean - 1.96 * se),
       ci_upper = mean + 1.96 * se,
-      IQR_bounds = quantile(value, c(0.25, 0.5, 0.75))
+      IQR_bounds = list(quantile(value, c(0.25, 0.5, 0.75)))
     ) %>%
+    # convert the list of quantiles to individual columns
     mutate(
-      IQR_lower = IQR_bounds[[1]], # Assign the first element (0.25 quantile)
-      median = IQR_bounds[[2]], # Assign the second element (0.5 quantile)
-      IQR_upper = IQR_bounds[[3]]  # Assign the third element (0.75 quantile)
+      IQR_lower = map_dbl(IQR_bounds, 1),
+      median = map_dbl(IQR_bounds, 2),
+      IQR_upper = map_dbl(IQR_bounds, 3)
     ) %>%
     select(-IQR_bounds) # Remove the IQR_bounds column
   return(summary)
@@ -327,7 +329,7 @@ log_plot <- function(summary, IQR = TRUE) {
     # Add the lines
     new_scale_fill() +
     geom_line(data = filtered, aes(x = time, y = central, color = variable),
-      size = 1.5) +
+      linewidth = 1.5) +
     scale_color_manual(values = colors) +
     # Add the confidence intervals
     geom_ribbon(data = filtered, alpha = 0.3,
@@ -356,8 +358,8 @@ log_plot <- function(summary, IQR = TRUE) {
   print(plot)
 }
 
-# profvis({
-#   simulations <- simulate(rep = 50, N0 = 1e5, dt = 1)
-#   summary <- summarise(simulations)
-#   log_plot(summary, IQR = T)
-# })
+profvis({
+  simulations <- simulate(rep = 100, N0 = 1e5, dt = 0.01)
+  summary <- summarise(simulations)
+  log_plot(summary, IQR = T)
+})

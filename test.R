@@ -18,3 +18,7 @@ quantile_75 <- percentiles[2]
 # Print the 25th and 75th percentiles
 print(quantile_25)
 print(quantile_75)
+
+
+# Unused code
+IQR_bounds = list(colQuantiles(as.matrix(value), probs = c(0.25, 0.5, 0.75), na.rm = TRUE))
