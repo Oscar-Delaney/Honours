@@ -94,6 +94,7 @@ ui <- fluidPage(
                         column(6, wellPanel(
                             p(basic_text),
                             numericInput("rep", "Number of Runs", value = 10, min = 1, step = 1),
+                            numericInput("time", "Simulation Time (hours)", value = 50, step = 1),
                             selectInput("stewardship", "Antibiotic Stewardship Strategy",
                                 choices = c(
                                     "Cycling" = "cycl",
@@ -103,12 +104,9 @@ ui <- fluidPage(
                                 )
                             ),
                             checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE),
-                            sliderInput("time", "Simulation Time (hours)",
-                                value = 50, min = 10, max = 100, step = 1
-                            ),
-                            sliderInput("dt", "log_10 of time between data points (hours)",
-                                value = -1, min = -3, max = 0, step = 0.1
-                            ),
+                            # sliderInput("dt", "log_10 of time between data points (hours)",
+                            #     value = -1, min = -3, max = 0, step = 0.1
+                            # ),
                             sliderInput("HGT", "log_10 of recombination rate",
                                 value = -4, min = -9, max = -3, step = 0.1
                             )
@@ -177,10 +175,11 @@ ui <- fluidPage(
                     "Graph",
                     radioButtons("display", "Uncertainty Display",
                         choices = c(
-                            "Median + 25th and 75th percentiles" = TRUE,
-                            "Mean + 95% confidence interval" = FALSE
+                            "Median + 25th and 75th percentiles" = "median",
+                            "Mean + 95% confidence interval" = "mean",
+                            "Plot all the runs" = "all"
                         ),
-                        selected = TRUE
+                        selected = "median"
                     ),
                     plotOutput("simulation_plot")
                 )
@@ -193,13 +192,13 @@ ui <- fluidPage(
 server <- function(input, output, session) {
     # Create a reactive expression for the simulation results
     simulation_result <- eventReactive(input$run_simulation, {
-        summarise(simulate(
+        simulate(
             rep = input$rep,
             pharmacokinetic = input$pharmacokinetic,
             stewardship = input$stewardship,
             time = input$time,
             freq = input$freq,
-            dt = 10^input$dt,
+            # dt = 10^input$dt,
             N0 = round(10^input$N0),
             D = 10^input$D,
             HGT = 10^input$HGT,
@@ -220,14 +219,14 @@ server <- function(input, output, session) {
             mu = input$growth[, "Mu"],
             k = input$growth[, "K"],
             alpha = input$growth[, "Alpha"]
-        ))
+        )
     })
 
     output$simulation_plot <- renderPlot({
         # Check if the simulation_result has been executed
         if (!is.null(simulation_result())) {
             # Create a plot of the simulation results
-            log_plot(simulation_result(), IQR = input$display)
+            log_plot(simulation_result(), type = input$display)
         }
     })
     # add code to reset all parameters to defaults

@@ -6,6 +6,10 @@ library(dplyr)
 library(purrr)
 library(matrixStats)
 library(profvis)
+library(parallel)
+library(future)
+library(future.apply)
+library(promises)
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, params) {
@@ -23,8 +27,8 @@ interaction <- function(A1_death, A2_death, theta) {
 
 # total death rate from two antibiotics with interactions
 death <- function(A1, A2, params) {
-  death1 <- hill(A1, params[c("psi","phi1","zeta1","kappa1")])
-  death2 <- hill(A2, params[c("psi","phi2","zeta2","kappa2")])
+  death1 <- hill(A1, params[c("psi", "phi1", "zeta1", "kappa1")])
+  death2 <- hill(A2, params[c("psi", "phi2", "zeta2", "kappa2")])
   interaction <- interaction(death1 / params["psi"],
     death2, params["theta"])
   return(death1 + death2 + interaction)
@@ -259,15 +263,17 @@ simulate <- function(
   }
   config$params <- cbind(psi, phi1, phi2, zeta1, zeta2, kappa1, kappa2, theta, mu, k, alpha)
   rownames(config$params) <- c("S", "R1", "R2", "R12")
-  # Run the simulation rep number of times
-  solutions <- lapply(1:rep, function(x) {single_run(config, x)})
-  return(do.call(rbind, solutions))
+  # Run the simulation rep number of times, using parallelisation if possible
+  plan(multisession) # compatible with both unix and Windows
+  solutions <- future_lapply(1:rep, function(x) {
+    single_run(config, x)},
+    future.seed = TRUE)
+  return(melt(do.call(rbind, solutions), id.vars = c("time", "rep")))
 }
 
 # A function to summarise the output of the simulation
 summarise <- function(solutions) {
-  melted <- melt(solutions, id.vars = c("time", "rep"))
-  summary <- melted %>%
+  summary <- solutions %>%
     group_by(time, variable) %>%
     reframe(
       mean = mean(value),
@@ -287,31 +293,40 @@ summarise <- function(solutions) {
   return(summary)
 }
 
-log_plot <- function(summary, IQR = TRUE) {
-  filtered <- summary[summary$variable %in% c("S", "R1", "R2", "R12"), ]
+log_plot <- function(solutions, type = "mean") {
   # Choose the type of central tendency and range to plot
-  if (IQR) {
-    filtered$central <- filtered$median
-    filtered$lower <- filtered$IQR_lower
-    filtered$upper <- filtered$IQR_upper
+  if (type == "median") {
+    summary <- summarise(solutions)
+    summary$central <- summary$median
+    summary$lower <- summary$IQR_lower
+    summary$upper <- summary$IQR_upper
+    summary$rep <- 1
+  } else if (type == "mean") {
+    summary <- summarise(solutions)
+    summary$central <- summary$mean
+    summary$lower <- summary$ci_lower
+    summary$upper <- summary$ci_upper
+    summary$rep <- 1
+  } else if (type == "all") {
+    summary <- solutions
+    summary$central <- summary$value
   } else {
-    filtered$central <- filtered$mean
-    filtered$lower <- filtered$ci_lower
-    filtered$upper <- filtered$ci_upper
+    stop("type must be either 'median' or 'mean'")
   }
-  # Initialise the colours 
+  filtered <- filter(summary, variable %in% c("S", "R1", "R2", "R12"))
+  # Initialise the colours
   colors <- c("black", "navy", "#800000", "#008000")
   # Create antibiotic concentrations data frame
-  times <- unique(summary$time)
+  times <- unique(solutions$time)
   background_df <- data.frame(
     xmin = times[-length(times)],
     xmax = times[-1],
-    A1 = summary[summary$variable == "A1", ]$mean[-1] /
-      max(summary[summary$variable == "A1", ]$mean),
-    A2 = summary[summary$variable == "A2", ]$mean[-1] /
-      max(summary[summary$variable == "A2", ]$mean)
+    A1 = solutions[solutions$rep == 1 & solutions$variable == "A1", "value"][-1] /
+      max(solutions[solutions$variable == "A1", "value"]),
+    A2 = solutions[solutions$rep == 1 & solutions$variable == "A2", "value"][-1] /
+      max(solutions[solutions$variable == "A2", "value"])
   )
-  peak <- max(summary$ci_upper, summary$mean, na.rm = TRUE)
+  peak <- max(solutions$value, na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
     # Add the gradient backgrounds
@@ -328,13 +343,11 @@ log_plot <- function(summary, IQR = TRUE) {
       limits = c(0, 1), name = "A2", labels = NULL) +
     # Add the lines
     new_scale_fill() +
-    geom_line(data = filtered, aes(x = time, y = central, color = variable),
-      linewidth = 1.5) +
+    geom_line(data = filtered, aes(x = time, y = central, color = variable, linetype = factor(rep)),
+      linewidth = 1 + 0.5 / max(filtered$rep)) +
     scale_color_manual(values = colors) +
-    # Add the confidence intervals
-    geom_ribbon(data = filtered, alpha = 0.3,
-      aes(x = time, ymin = lower, ymax = upper, fill = variable)) +
-    scale_fill_manual(values = colors) +
+    scale_linetype_manual(values = rep("solid", max(filtered$rep))) +
+    guides(linetype = "none") +
     scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
       breaks = 10^seq(0, 10),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
@@ -354,12 +367,15 @@ log_plot <- function(summary, IQR = TRUE) {
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
+  # Add the confidence intervals
+  if (type %in% c("mean", "median")) {
+    plot <- plot +
+      geom_ribbon(data = filtered, alpha = 0.3,
+        aes(x = time, ymin = lower, ymax = upper, fill = variable)) +
+      scale_fill_manual(values = colors)
+  }
   # Display the plot
   print(plot)
 }
 
-profvis({
-  simulations <- simulate(rep = 100, N0 = 1e5, dt = 0.01)
-  summary <- summarise(simulations)
-  log_plot(summary, IQR = T)
-})
+system.time(log_plot(simulate(rep = 3, N0 = 1e5, dt = 0.01, init = c(S = 1e5, R1 = 0, R2 = 0, R12 = 0)), type = "mean"))
