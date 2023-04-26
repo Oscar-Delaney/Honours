@@ -37,8 +37,8 @@ Theta is the drug-drug interaction parameter, with values between -1 and 1."
 # Default values
 drugs_default <- matrix(c(
     -9, -9, # log_10 mutation rates
-    -1, -1, # log_10 drug elimination rates
-    10, 10 # drug influx concentrations
+    log(2) / 3.5, log(2) / 3.5, # log_10 drug elimination rates
+    119, 119 # drug influx concentrations
 ), nrow = 2, ncol = 3, dimnames = list(
     c("A1", "A2"),
     c("Mutation rate", "Elimination rate", "Influx")
@@ -47,7 +47,7 @@ drugs_default <- matrix(c(
 growth_default <- matrix(
     c(
         1e10, 0, 0, 0, # init: initial populations
-        1, 1, 1, 1, # mu: growth rates
+        0.8 * c(1, 0.9, 0.9, 0.81), # mu: growth rates
         1e2, 1e2, 1e2, 1e2, # k: half-maximal growth rates
         1, 1, 1, 1 # alpha: resources used per unit growth
     ),
@@ -60,12 +60,12 @@ growth_default <- matrix(
 
 pd_default <- matrix(
     c(
-        0.1, 0.1, 0.1, 0.1, # psi
-        0.2, 0.2, 0.2, 0.2, # phi1
-        1, 100, 1, 100, # zeta1
+        0.3, 0.3, 0.3, 0.3, # psi
+        0.6, 0.6, 0.6, 0.6, # phi1
+        17, 476, 17, 476, # zeta1
         1, 1, 1, 1, # kappa1
-        0.2, 0.2, 0.2, 0.2, # phi2
-        1, 1, 100, 100, # zeta2
+        0.6, 0.6, 0.6, 0.6, # phi2
+        17, 17, 476, 476, # zeta2
         1, 1, 1, 1, # kappa2
         0, 0, 0, 0 # theta
     ),
@@ -94,7 +94,7 @@ ui <- fluidPage(
                         column(6, wellPanel(
                             p(basic_text),
                             numericInput("rep", "Number of Runs", value = 10, min = 1, step = 1),
-                            numericInput("time", "Simulation Time (hours)", value = 50, step = 1),
+                            numericInput("time", "Simulation Time (hours)", value = 100, step = 1),
                             selectInput("stewardship", "Antibiotic Stewardship Strategy",
                                 choices = c(
                                     "Cycling" = "cycl",
@@ -107,8 +107,8 @@ ui <- fluidPage(
                             # sliderInput("dt", "log_10 of time between data points (hours)",
                             #     value = -1, min = -3, max = 0, step = 0.1
                             # ),
-                            sliderInput("HGT", "log_10 of recombination rate",
-                                value = -4, min = -9, max = -3, step = 0.1
+                            numericInput("HGT", "recombination rate",
+                                value = 0, min = 0, max = 1, step = 1e-4
                             )
                         ))
                     )
@@ -149,10 +149,10 @@ ui <- fluidPage(
                                 value = 10, min = 1, max = 30, step = 1
                             ),
                             sliderInput("N0", "log_10 of Nutrient influx at bottleneck",
-                                value = 10, min = 2, max = 20, step = 0.1
+                                value = 15, min = 2, max = 20, step = 0.1
                             ),
                             sliderInput("D", "log_10 of Dilution fraction at bottleneck",
-                                value = -2, min = -5, max = 0, step = 0.1
+                                value = -1, min = -5, max = 0, step = 0.1
                             )
                         ))
                     )
@@ -181,7 +181,7 @@ ui <- fluidPage(
                         ),
                         selected = "median"
                     ),
-                    plotOutput("simulation_plot")
+                    plotOutput("simulation_plot", height = "800", width = "100%")
                 )
                 # Add other tabs here
             )
@@ -201,11 +201,11 @@ server <- function(input, output, session) {
             # dt = 10^input$dt,
             N0 = round(10^input$N0),
             D = 10^input$D,
-            HGT = 10^input$HGT,
+            HGT = input$HGT,
             m1 = 10^input$drugs["A1", "Mutation rate"],
             m2 = 10^input$drugs["A2", "Mutation rate"],
-            d1 = input$pharmacokinetic * 10^input$drugs["A1", "Elimination rate"],
-            d2 = input$pharmacokinetic * 10^input$drugs["A2", "Elimination rate"],
+            d1 = input$pharmacokinetic * input$drugs["A1", "Elimination rate"],
+            d2 = input$pharmacokinetic * input$drugs["A2", "Elimination rate"],
             influx = setNames(input$drugs[, "Influx"], c("A1", "A2")),
             init = setNames(input$growth[, c("Init")], c("S", "R1", "R2", "R12")),
             psi = input$pd[, "Psi"],

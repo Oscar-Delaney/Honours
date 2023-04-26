@@ -10,6 +10,7 @@ library(parallel)
 library(future)
 library(future.apply)
 library(promises)
+N_adj <- 100 # hacky fix to non-negative N requirement in adaptivatau
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, params) {
@@ -21,16 +22,16 @@ hill <- function(A, params) {
 }
 
 # interaction between the two drugs
-interaction <- function(A1_death, A2_death, theta) {
-  return(theta * A1_death * A2_death)
+interaction <- function(A1_death, A2_death, phi1, phi2, theta) {
+  return(theta * A1_death * A2_death / sqrt(phi1 * phi2))
 }
 
 # total death rate from two antibiotics with interactions
 death <- function(A1, A2, params) {
   death1 <- hill(A1, params[c("psi", "phi1", "zeta1", "kappa1")])
   death2 <- hill(A2, params[c("psi", "phi2", "zeta2", "kappa2")])
-  interaction <- interaction(death1 / params["psi"],
-    death2, params["theta"])
+  interaction <- interaction(death1, death2,
+    params["phi1"], params["phi2"], params["theta"])
   return(death1 + death2 + interaction)
 }
 
@@ -38,6 +39,7 @@ death <- function(A1, A2, params) {
 monod <- function(N, params) {
   mu <- params[1]
   k <- params[2]
+  N <- max(0,N - N_adj)
   return(mu * N / (N + k))
 }
 
@@ -192,10 +194,6 @@ single_run <- function(config, x) {
   }
   # Interpolate the solution to the common time grid
   solution <- as.data.frame(solution)
-  # print(length(solution$time))
-  # duplicated_time_values <- solution[duplicated(solution$time), ]
-  # print(duplicated_time_values)
-  # plot(solution$time)
   solution <- data.frame(
     time = config$time_grid,
     S = approx(solution$time, solution$S, xout = config$time_grid)$y,
@@ -217,35 +215,35 @@ simulate <- function(
   rep = 1,
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
-  time = 50, # time to simulate, in hours
+  time = 100, # time to simulate, in hours
   dt = 0.01, # time step, in hours
   freq = 10, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
-  N0 = 100, # initial nutrient concentration
-  HGT = 0.000, # rate of horizontal gene transfer
-  m1 = 0.1, # rate of mutations conferring resistance to drug 1
-  m2 = 0.1, # rate of mutations conferring resistance to drug 2
-  d1 = 0.1 * pharmacokinetic, # rate of drug 1 elimination
-  d2 = 0.1 * pharmacokinetic, # rate of drug 2 elimination
-  influx = c(A1 = 10, A2 = 10), # drug influx concentrations
+  N0 = 1e15, # initial nutrient concentration
+  HGT = 0, # rate of horizontal gene transfer
+  m1 = 1e-9, # rate of mutations conferring resistance to drug 1
+  m2 = 1e-9, # rate of mutations conferring resistance to drug 2
+  d1 = log(2) / 3.5 * pharmacokinetic, # rate of drug 1 elimination
+  d2 = log(2) / 3.5 * pharmacokinetic, # rate of drug 2 elimination
+  influx = 119 * c(A1 = 1, A2 = 1), # drug influx concentrations
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
-  init = c(S = 100, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
-  psi = c(0.1, 0.1, 0.1, 0.1), # growth rate with no drugs
-  phi1 = c(0.2, 0.2, 0.2, 0.2), # maximum killing rate for drug 1
-  phi2 = c(0.2, 0.2, 0.2, 0.2), # maximum killing rate for drug 2
-  zeta1 = c(1, 100, 1, 100), # MIC drug 1
-  zeta2 = c(1, 1, 100, 100), # MIC drug 2
+  init = c(S = 1e10, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
+  psi = 0.3 * c(1, 1, 1, 1), # growth rate with no drugs
+  phi1 = 2 * psi, # maximum reduction in fitness for drug 1
+  phi2 = 2 * psi, # maximum reduction in fitness for drug 2
+  zeta1 = 17 * c(1, 28, 1, 28), # MIC drug 1
+  zeta2 = 17 * c(1, 1, 28, 28), # MIC drug 2
   kappa1 = c(1, 1, 1, 1), # Hill function steepness parameter drug 1
   kappa2 = c(1, 1, 1, 1), # Hill function steepness parameter drug 2
   theta = c(0, 0, 0, 0), # drug interaction term
-  mu = c(1, 1, 1, 1), # growth rate with infinite resources
+  mu = 0.88 * c(1, 0.9, 0.9, 0.81), # growth rate with infinite resources
   k = c(100, 100, 100, 100), # resource concentration at half-maximal growth
   alpha = c(1, 1, 1, 1) # resources used per unit growth
   ) {
   # Define the parameters of the model
   config <- list(
     D = D,
-    N0 = N0,
+    N0 = N0 + N_adj, # hacky adjustment to avoid adaptivetau nonnegative issue
     init = init,
     HGT = HGT,
     m1 = m1,
@@ -382,4 +380,4 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(rep = 3, m1 = 1e-9, m2 = 1e-9, N0 = 1e15, dt = 0.01, init = c(S = 1e10, R1 = 0, R2 = 0, R12 = 0)), type = "mean"))
+# system.time(log_plot(simulate(rep = 10), type = "mean"))
