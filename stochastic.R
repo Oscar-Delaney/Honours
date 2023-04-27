@@ -1,4 +1,5 @@
 library(adaptivetau)
+library(deSolve)
 library(ggplot2)
 library(ggnewscale)
 library(reshape2)
@@ -66,12 +67,17 @@ bottleneck <- function(state,
   N0 = 100,
   influx = c(10, 10),
   cycl = FALSE,
-  pharmacokinetic = FALSE) {
+  pharmacokinetic = FALSE,
+  deterministic = FALSE) {
   if (cycl) {
     pattern <- update_pattern(state["prev"])
   }
   populations <- state[c("S", "R1", "R2", "R12")]
-  diluted <- rbinom(length(populations), populations, D)
+  if (deterministic) {
+    diluted <- populations * D
+  } else {
+    diluted <- rbinom(length(populations), populations, D)
+  }
   state <- c(diluted, N = N0,
     pharmacokinetic * state[c("A1", "A2")] + influx * pattern,
     state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
@@ -97,9 +103,9 @@ make_transitions <- function() {
   c(R12 = +1), # mutation to R12
   c(S = -1, R1 = +1, R2 = +1, R12 = -1), # HGT loss of MDR
   c(S = +1, R1 = -1, R2 = -1, R12 = +1), # HGT gain of MDR
+  c(N = -1), # nutrient depletion
   c(A1 = -1), # drug 1 depletion
-  c(A2 = -1), # drug 2 depletion
-  c(N = -1) # nutrient depletion
+  c(A2 = -1) # drug 2 depletion
 ))
 }
 
@@ -132,9 +138,9 @@ rates <- function(state, config, t) {
       R2 * config$m1 * monod(N, params["R2", c("mu", "k")])
     HGT_MDR_loss <- config$HGT * R12 * S
     HGT_MDR_gain <- config$HGT * R1 * R2
+    N_depletion <- deplete(state, params[, "alpha"], params[, c("mu", "k")])
     A1_depletion <- config$d1 * A1
     A2_depletion <- config$d2 * A2
-    N_depletion <- deplete(state, params[, "alpha"], params[, c("mu", "k")])
     # return the rates
     return(c(
       S_growth = unname(S_growth),
@@ -150,12 +156,30 @@ rates <- function(state, config, t) {
       R12_mutation = unname(R12_mutation),
       HGT_MDR_loss = unname(HGT_MDR_loss),
       HGT_MDR_gain = unname(HGT_MDR_gain),
+      N_depletion = unname(N_depletion),
       A1_depletion = unname(A1_depletion),
-      A2_depletion = unname(A2_depletion),
-      N_depletion = unname(N_depletion)
+      A2_depletion = unname(A2_depletion)
     ))
   })
 
+}
+
+# a function to convert the transition rates into an ODE function
+ode_rates <- function(t, state, config) {
+  adaptivetau_rates = rates(state, config, t)
+  ode_rates_xyz <- with(as.list(adaptivetau_rates),{
+    c(
+      S = S_growth - S_death + HGT_MDR_gain - HGT_MDR_loss,
+      R1 = R1_growth - R1_death + R1_mutation - HGT_MDR_gain + HGT_MDR_loss,
+      R2 = R2_growth - R2_death + R2_mutation - HGT_MDR_gain + HGT_MDR_loss,
+      R12 = R12_growth - R12_death + R12_mutation + HGT_MDR_gain - HGT_MDR_gain,
+      N = -N_depletion,
+      A1 = -A1_depletion,
+      A2 = -A2_depletion,
+      prev = 0
+    )
+  })
+  return(list(ode_rates_xyz))
 }
 
 # a function to implement one run of the model
@@ -167,9 +191,14 @@ single_run <- function(config, x) {
       prev = sum(config$pattern * c(1, 2)))
   t <- 0
   while (t < max(config$time_grid)) {
-    # Run the model between bottlenecks
-    new_solution <- ssa.adaptivetau(state, transitions, rates, config,
-      tf = config$freq)
+    # Run the model between bottlenecks, deterministically or stochastically
+    if (config$deterministic) {
+      times <- config$time_grid[config$time_grid <= config$freq]
+      new_solution <- ode(state, times, ode_rates, config)
+    } else {
+      new_solution <- ssa.adaptivetau(state, transitions, rates, config,
+        tf = config$freq)
+    }
     # Make the time column reflect the overall time accurately
     new_solution[, 1] <- new_solution[, 1] + t
     # Run the bottleneck and update the state
@@ -180,7 +209,8 @@ single_run <- function(config, x) {
       N0 = config$N0,
       influx = config$influx,
       cycl = config$stewardship == "cycl",
-      pharmacokinetic = config$pharmacokinetic
+      pharmacokinetic = config$pharmacokinetic,
+      deterministic = config$deterministic
     )
 
     # Update the solution
@@ -214,6 +244,7 @@ single_run <- function(config, x) {
 simulate <- function(
   rep = 1,
   pharmacokinetic = FALSE, # should be either TRUE or FALSE
+  deterministic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   time = 100, # time to simulate, in hours
   dt = 0.01, # time step, in hours
@@ -253,6 +284,7 @@ simulate <- function(
     influx = influx,
     stewardship = stewardship,
     pharmacokinetic = pharmacokinetic,
+    deterministic = deterministic,
     freq = freq,
     time_grid = seq(0, time, by = dt) # a common time grid for all runs
   )
@@ -380,4 +412,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(rep = 10), type = "mean"))
+system.time(log_plot(simulate(deterministic = T, stewardship = "cycl",time=100,rep = 10,m1=0,m2=0,N0=1e8, init = c(S=1e6,R1=0,R2=0,R12=0)), type = "all"))
+log_plot(simulate(), type = "all")
