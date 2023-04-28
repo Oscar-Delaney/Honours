@@ -13,9 +13,9 @@ an ODE model. For details see Delaney, Engelstaedter, and Letten (forthcoming).
 Contact Oscar Delaney on o.delaney@uq.net.au with any errors or suggestions."
 
 drugs_text <- "A1 and A2 are arbitrary antibiotics. The mutation rate
-is the log base 10 of the proportion of genome replications that result in
-resistance to that drug. The elimination rate is the log base 10 of the
-rate at which the drug is eliminated from the body. This is only used if
+is the proportion of genome replications that result in
+resistance to that drug. The elimination rate is the rate at which the drug
+degenerates in the body, in units of the MIC. This is only used if
 the pharmacokinetic model is selected. The influx is the concentration of
 each drug added at bottleneck event."
 
@@ -36,9 +36,9 @@ Theta is the drug-drug interaction parameter, with values between -1 and 1."
 
 # Default values
 drugs_default <- matrix(c(
-    -9, -9, # log_10 mutation rates
-    log(2) / 3.5, log(2) / 3.5, # log_10 drug elimination rates
-    119, 119 # drug influx concentrations
+    1e-9, 1e-9, # mutation rates
+    log(2) / 3.5, log(2) / 3.5, # drug elimination rates
+    7, 7 # drug influx concentrations, MIC units
 ), nrow = 2, ncol = 3, dimnames = list(
     c("A1", "A2"),
     c("Mutation rate", "Elimination rate", "Influx")
@@ -62,10 +62,10 @@ pd_default <- matrix(
     c(
         0.3, 0.3, 0.3, 0.3, # psi
         0.6, 0.6, 0.6, 0.6, # phi1
-        17, 476, 17, 476, # zeta1
+        1, 28, 1, 28, # zeta1
         1, 1, 1, 1, # kappa1
         0.6, 0.6, 0.6, 0.6, # phi2
-        17, 17, 476, 476, # zeta2
+        1, 1, 28, 28, # zeta2
         1, 1, 1, 1, # kappa2
         0, 0, 0, 0 # theta
     ),
@@ -104,6 +104,7 @@ ui <- fluidPage(
                                 )
                             ),
                             checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE),
+                            checkboxInput("deterministic", "Deterministic Model", FALSE),
                             # sliderInput("dt", "log_10 of time between data points (hours)",
                             #     value = -1, min = -3, max = 0, step = 0.1
                             # ),
@@ -195,6 +196,7 @@ server <- function(input, output, session) {
         simulate(
             rep = input$rep,
             pharmacokinetic = input$pharmacokinetic,
+            deterministic = input$deterministic,
             stewardship = input$stewardship,
             time = input$time,
             freq = input$freq,
@@ -202,8 +204,8 @@ server <- function(input, output, session) {
             N0 = round(10^input$N0),
             D = 10^input$D,
             HGT = input$HGT,
-            m1 = 10^input$drugs["A1", "Mutation rate"],
-            m2 = 10^input$drugs["A2", "Mutation rate"],
+            m1 = input$drugs["A1", "Mutation rate"],
+            m2 = input$drugs["A2", "Mutation rate"],
             d1 = input$pharmacokinetic * input$drugs["A1", "Elimination rate"],
             d2 = input$pharmacokinetic * input$drugs["A2", "Elimination rate"],
             influx = setNames(input$drugs[, "Influx"], c("A1", "A2")),

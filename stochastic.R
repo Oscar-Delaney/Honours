@@ -256,14 +256,14 @@ simulate <- function(
   m2 = 1e-9, # rate of mutations conferring resistance to drug 2
   d1 = log(2) / 3.5 * pharmacokinetic, # rate of drug 1 elimination
   d2 = log(2) / 3.5 * pharmacokinetic, # rate of drug 2 elimination
-  influx = 119 * c(A1 = 1, A2 = 1), # drug influx concentrations
+  influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
   init = c(S = 1e10, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
   psi = 0.3 * c(1, 1, 1, 1), # growth rate with no drugs
   phi1 = 2 * psi, # maximum reduction in fitness for drug 1
   phi2 = 2 * psi, # maximum reduction in fitness for drug 2
-  zeta1 = 17 * c(1, 28, 1, 28), # MIC drug 1
-  zeta2 = 17 * c(1, 1, 28, 28), # MIC drug 2
+  zeta1 = c(1, 28, 1, 28), # MIC drug 1, units scales so zeta1_S = 1
+  zeta2 = c(1, 1, 28, 28), # MIC drug 2, units scales so zeta2_S = 1
   kappa1 = c(1, 1, 1, 1), # Hill function steepness parameter drug 1
   kappa2 = c(1, 1, 1, 1), # Hill function steepness parameter drug 2
   theta = c(0, 0, 0, 0), # drug interaction term
@@ -412,5 +412,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(deterministic = T, stewardship = "cycl",time=100,rep = 10,m1=0,m2=0,N0=1e8, init = c(S=1e6,R1=0,R2=0,R12=0)), type = "all"))
-log_plot(simulate(), type = "all")
+system.time(log_plot(simulate(deterministic = T, stewardship = "cycl",time=100,rep = 1,m1=0,m2=0,N0=1e8, init = c(S=1e6,R1=0,R2=0,R12=0)), type = "all"))
+# log_plot(simulate(), type = "all")
