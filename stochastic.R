@@ -67,7 +67,6 @@ bottleneck <- function(state,
   N0 = 100,
   influx = c(10, 10),
   cycl = FALSE,
-  pharmacokinetic = FALSE,
   deterministic = FALSE) {
   if (cycl) {
     pattern <- update_pattern(state["prev"])
@@ -78,34 +77,35 @@ bottleneck <- function(state,
   } else {
     diluted <- rbinom(length(populations), populations, D)
   }
-  state <- c(diluted, N = N0,
-    pharmacokinetic * state[c("A1", "A2")] + influx * pattern,
+  new_state <- c(diluted, N0 + (state["N"] - N_adj) * D,
+    state[c("A1", "A2")] * D + influx * pattern * (1 - D),
     state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
-  state[state < 0] <- 0 # backup - shouldn't be needed
-  # set the names of the state variables
-  names(state) <- c("S", "R1", "R2", "R12", "N", "A1", "A2", "prev")
-  return(state)
+  if (!deterministic) {
+    new_state <- round(new_state)
+  }
+  names(new_state) <- c("S", "R1", "R2", "R12", "N", "A1", "A2", "prev")
+  return(new_state)
 }
 
 # a function outputting the transitions that can occur in the model
 make_transitions <- function() {
   return(list(
-  c(S = +1), # growth in S
-  c(R1 = +1), # growth in R1
-  c(R2 = +1), # growth in R2
-  c(R12 = +1), # growth in R12
-  c(S = -1), # drug-induced death in S
-  c(R1 = -1), # drug-induced death in R1
-  c(R2 = -1), # drug-induced death in R2
-  c(R12 = -1), # drug-induced death in R12
-  c(R1 = +1), # mutation to R1
-  c(R2 = +1), # mutation to R2
-  c(R12 = +1), # mutation to R12
-  c(S = -1, R1 = +1, R2 = +1, R12 = -1), # HGT loss of MDR
-  c(S = +1, R1 = -1, R2 = -1, R12 = +1), # HGT gain of MDR
-  c(N = -1), # nutrient depletion
-  c(A1 = -1), # drug 1 depletion
-  c(A2 = -1) # drug 2 depletion
+  S_growth = c(S = +1),
+  R1_growth = c(R1 = +1),
+  R2_growth = c(R2 = +1),
+  R12_growth = c(R12 = +1),
+  S_death = c(S = -1),
+  R1_death = c(R1 = -1),
+  R2_death = c(R2 = -1),
+  R12_death = c(R12 = -1),
+  R1_mutation = c(R1 = +1),
+  R2_mutation = c(R2 = +1),
+  R12_mutation = c(R12 = +1),
+  HGT_MDR_loss = c(S = -1, R1 = +1, R2 = +1, R12 = -1),
+  HGT_MDR_gain = c(S = +1, R1 = -1, R2 = -1, R12 = +1),
+  N_depletion = c(N = -1),
+  A1_depletion = c(A1 = -1),
+  A2_depletion = c(A2 = -1)
 ))
 }
 
@@ -196,8 +196,10 @@ single_run <- function(config, x) {
       times <- config$time_grid[config$time_grid <= config$freq]
       new_solution <- ode(state, times, ode_rates, config)
     } else {
-      new_solution <- ssa.adaptivetau(state, transitions, rates, config,
-        tf = config$freq)
+      new_solution <- ssa.adaptivetau(
+        state, transitions, rates, config, tf = config$freq,
+        deterministic = grep("deplet", names(transitions))
+      )
     }
     # Make the time column reflect the overall time accurately
     new_solution[, 1] <- new_solution[, 1] + t
@@ -209,7 +211,6 @@ single_run <- function(config, x) {
       N0 = config$N0,
       influx = config$influx,
       cycl = config$stewardship == "cycl",
-      pharmacokinetic = config$pharmacokinetic,
       deterministic = config$deterministic
     )
 
@@ -243,7 +244,6 @@ single_run <- function(config, x) {
 # a function to simulate the model
 simulate <- function(
   rep = 1,
-  pharmacokinetic = FALSE, # should be either TRUE or FALSE
   deterministic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   time = 100, # time to simulate, in hours
@@ -254,8 +254,8 @@ simulate <- function(
   HGT = 0, # rate of horizontal gene transfer
   m1 = 1e-9, # rate of mutations conferring resistance to drug 1
   m2 = 1e-9, # rate of mutations conferring resistance to drug 2
-  d1 = log(2) / 3.5 * pharmacokinetic, # rate of drug 1 elimination
-  d2 = log(2) / 3.5 * pharmacokinetic, # rate of drug 2 elimination
+  d1 = log(2) / 3.5, # rate of drug 1 elimination
+  d2 = log(2) / 3.5, # rate of drug 2 elimination
   influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
   init = c(S = 1e10, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
@@ -283,7 +283,6 @@ simulate <- function(
     d2 = d2,
     influx = influx,
     stewardship = stewardship,
-    pharmacokinetic = pharmacokinetic,
     deterministic = deterministic,
     freq = freq,
     time_grid = seq(0, time, by = dt) # a common time grid for all runs
@@ -295,7 +294,8 @@ simulate <- function(
   } else {
     config$pattern <- c(1, 0)
   }
-  config$params <- cbind(psi, phi1, phi2, zeta1, zeta2, kappa1, kappa2, theta, mu, k, alpha)
+  config$params <- cbind(psi, phi1, phi2, zeta1, zeta2,
+    kappa1, kappa2, theta, mu, k, alpha)
   rownames(config$params) <- c("S", "R1", "R2", "R12")
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
@@ -412,5 +412,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(deterministic = T, stewardship = "cycl",time=100,rep = 1,m1=0,m2=0,N0=1e8, init = c(S=1e6,R1=0,R2=0,R12=0)), type = "all"))
+system.time(log_plot(simulate(deterministic = F, D = 1e-2, stewardship = "cycl",time=100,rep = 10,m1=0,m2=0,N0=1e8, init = c(S=1e6,R1=0,R2=0,R12=0)), type = "all"))
 # log_plot(simulate(), type = "all")
