@@ -13,10 +13,9 @@ an ODE model. For details see Delaney, Engelstaedter, and Letten (forthcoming).
 Contact Oscar Delaney on o.delaney@uq.net.au with any errors or suggestions."
 
 drugs_text <- "A1 and A2 are arbitrary antibiotics. The mutation rate
-is the proportion of genome replications that result in
-resistance to that drug. The elimination rate is the rate at which the drug
-degenerates in the body, in units of the MIC. This is only used if
-the pharmacokinetic model is selected. The influx is the concentration of
+is the proportion of genome replications that result in resistance to 
+that drug. The elimination rate is the rate at which the drug degenerates
+in the body, in units of hours^-1. The influx is the concentration of
 each drug added at bottleneck event."
 
 growth_text <- "The rows represent four bacterial strains: Susceptible, 
@@ -46,9 +45,9 @@ drugs_default <- matrix(c(
 
 growth_default <- matrix(
     c(
-        1e10, 0, 0, 0, # init: initial populations
+        1e12, 0, 0, 0, # init: initial populations
         0.8 * c(1, 0.9, 0.9, 0.81), # mu: growth rates
-        1e2, 1e2, 1e2, 1e2, # k: half-maximal growth rates
+        1e14 * c(1, 1, 1, 1), # k: nutrients at half-maximal growth rate
         1, 1, 1, 1 # alpha: resources used per unit growth
     ),
     nrow = 4, ncol = 4,
@@ -93,7 +92,7 @@ ui <- fluidPage(
                     fluidRow(
                         column(6, wellPanel(
                             p(basic_text),
-                            numericInput("rep", "Number of Runs", value = 10, min = 1, step = 1),
+                            numericInput("rep", "Number of Runs", value = 1, min = 1, step = 1),
                             numericInput("time", "Simulation Time (hours)", value = 100, step = 1),
                             selectInput("stewardship", "Antibiotic Stewardship Strategy",
                                 choices = c(
@@ -103,7 +102,6 @@ ui <- fluidPage(
                                     "Drug 2 Only" = "2_only"
                                 )
                             ),
-                            checkboxInput("pharmacokinetic", "Pharmacokinetic Model", FALSE),
                             checkboxInput("deterministic", "Deterministic Model", FALSE),
                             # sliderInput("dt", "log_10 of time between data points (hours)",
                             #     value = -1, min = -3, max = 0, step = 0.1
@@ -180,7 +178,7 @@ ui <- fluidPage(
                             "Mean + 95% confidence interval" = "mean",
                             "Plot all the runs" = "all"
                         ),
-                        selected = "median"
+                        selected = "all"
                     ),
                     plotOutput("simulation_plot", height = "800", width = "100%")
                 )
@@ -195,7 +193,6 @@ server <- function(input, output, session) {
     simulation_result <- eventReactive(input$run_simulation, {
         simulate(
             rep = input$rep,
-            pharmacokinetic = input$pharmacokinetic,
             deterministic = input$deterministic,
             stewardship = input$stewardship,
             time = input$time,
@@ -206,8 +203,8 @@ server <- function(input, output, session) {
             HGT = input$HGT,
             m1 = input$drugs["A1", "Mutation rate"],
             m2 = input$drugs["A2", "Mutation rate"],
-            d1 = input$pharmacokinetic * input$drugs["A1", "Elimination rate"],
-            d2 = input$pharmacokinetic * input$drugs["A2", "Elimination rate"],
+            d1 = input$drugs["A1", "Elimination rate"],
+            d2 = input$drugs["A2", "Elimination rate"],
             influx = setNames(input$drugs[, "Influx"], c("A1", "A2")),
             init = setNames(input$growth[, c("Init")], c("S", "R1", "R2", "R12")),
             psi = input$pd[, "Psi"],
