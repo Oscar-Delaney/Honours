@@ -247,7 +247,7 @@ simulate <- function(
   deterministic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   time = 100, # time to simulate, in hours
-  dt = 0.01, # time step, in hours
+  dt = 0.1, # time step, in hours
   freq = 10, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
   N0 = 1e15, # initial nutrient concentration
@@ -412,5 +412,7 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(deterministic = F, D = 1e-2, stewardship = "cycl",time=100,rep = 10,m1=0,m2=0,N0=1e8, init = c(S=1e6,R1=0,R2=0,R12=0)), type = "all"))
+# system.time(log_plot(simulate(freq = 17, D = 1e-5, time = 100, rep = 10, dt = 0.1)))
 # log_plot(simulate(), type = "all")
+# sols = simulate(freq=33,rep=1,dt=0.01)
+# tail(sols[sols$variable=="S",],110)
