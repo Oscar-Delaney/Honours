@@ -96,8 +96,7 @@ metrics_plot2 <- function(summary, metric, title, ylab) {
             x = "Drug interaction parameter (theta)",
             y = ylab
         ) +
-        # log-transform y axis
-        scale_y_log10() +
+        # scale_y_log10() +
         scale_color_discrete(name = "N0") +
         theme(
             legend.position = "bottom",
@@ -111,8 +110,8 @@ metrics_plot2 <- function(summary, metric, title, ylab) {
 
 
 m_rate <- 1e-6
-theta = seq(-1, 1, by = 0.5)
-N0 = 10 ^ seq(6, 10, by = 1)
+theta = seq(-2, 2, by = 0.1)
+N0 = 10 ^ seq(8, 10, by = 1)
 summary <- expand.grid(theta = theta, N0 = N0)
 summary$R12 <- 0
 summary$t_clear <- 0
@@ -151,8 +150,9 @@ for (i in seq_len(nrow(summary))) {
     summary$t_clear[i] <- metric_results$t_clear
 }
 
-metrics_plot2(summary, "R12", "Public Health Efficacy", "1 / Double-resistant population size")
-metrics_plot2(summary, "t_clear", "Clinical Efficacy", "1 / Time to clearance (days)")
+data_to_plot <- summary[summary$N0 == 1e8,]
+metrics_plot2(data_to_plot, "R12", "Public Health Efficacy", "1 / Double-resistant population size")
+metrics_plot2(data_to_plot, "t_clear", "Clinical Efficacy", "1 / Time to clearance (days)")
 # Save the simulation results to a file
 save(data, file = "results/data2.RData")
 # Save summary statistics to a CSV file
