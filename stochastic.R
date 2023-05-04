@@ -1,16 +1,9 @@
 library(adaptivetau)
 library(deSolve)
-library(ggplot2)
+library(tidyverse)
 library(ggnewscale)
-library(reshape2)
-library(dplyr)
-library(purrr)
-library(matrixStats)
-library(profvis)
-library(parallel)
 library(future)
 library(future.apply)
-library(promises)
 N_adj <- 100 # hacky fix to non-negative N requirement in adaptivatau
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
@@ -224,21 +217,41 @@ single_run <- function(config, x) {
     t <- t + config$freq
   }
   # Interpolate the solution to the common time grid
-  solution <- as.data.frame(solution)
-  solution <- data.frame(
-    time = config$time_grid,
-    S = approx(solution$time, solution$S, xout = config$time_grid)$y,
-    R1 = approx(solution$time, solution$R1, xout = config$time_grid)$y,
-    R2 = approx(solution$time, solution$R2, xout = config$time_grid)$y,
-    R12 = approx(solution$time, solution$R12, xout = config$time_grid)$y,
-    N = approx(solution$time, solution$N, xout = config$time_grid)$y,
-    A1 = approx(solution$time, solution$A1, xout = config$time_grid,
-      method = "constant", f = 1)$y,
-    A2 = approx(solution$time, solution$A2, xout = config$time_grid,
-      method = "constant", f = 1)$y,
-    rep = x
-  )
-  return(solution)
+  solution_tibble <- as_tibble(solution) %>%
+    pivot_longer(cols = -time, names_to = "variable", values_to = "value")
+    
+
+  # Define the time values at which you want to interpolate
+  new_times <- seq(0, 1, by = 0.00125)
+
+  # Group the data by variable, interpolate the values at new_times,
+  # and create a new tibble
+  solution_interpolated_new <- solution_interpolated %>%
+    group_by(variable) %>%
+      summarise(interpolated_value = approx(time, value, xout = new_times)$y) %>%
+      ungroup()
+
+  solution_interpolated <- solution_tibble %>%
+    group_by(variable) %>%
+    summarise(interpolated_value = approx(time, value, xout = config$time_grid, n = length(config$time_grid))$y) %>%
+    ungroup() %>%
+    pivot_wider(names_from = variable, values_from = interpolated_value) %>%
+    mutate(rep = x)
+  # solution <- as.data.frame(solution)
+  # solution <- data.frame(
+  #   time = config$time_grid,
+  #   S = approx(solution$time, solution$S, xout = config$time_grid)$y,
+  #   R1 = approx(solution$time, solution$R1, xout = config$time_grid)$y,
+  #   R2 = approx(solution$time, solution$R2, xout = config$time_grid)$y,
+  #   R12 = approx(solution$time, solution$R12, xout = config$time_grid)$y,
+  #   N = approx(solution$time, solution$N, xout = config$time_grid)$y,
+  #   A1 = approx(solution$time, solution$A1, xout = config$time_grid,
+  #     method = "constant", f = 1)$y,
+  #   A2 = approx(solution$time, solution$A2, xout = config$time_grid,
+  #     method = "constant", f = 1)$y,
+  #   rep = x
+  # )
+  return(solution_interpolated)
 }
 
 # a function to simulate the model
@@ -299,10 +312,10 @@ simulate <- function(
   rownames(config$params) <- c("S", "R1", "R2", "R12")
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
-  solutions <- future_lapply(1:rep, function(x) {
+  solutions <- bind_rows(future_lapply(1:rep, function(x) {
     single_run(config, x)},
-    future.seed = TRUE)
-  return(melt(do.call(rbind, solutions), id.vars = c("time", "rep")))
+    future.seed = TRUE))
+  return(pivot_longer(solutions), cols = -c(time, rep), names_to = "variable")
 }
 
 # A function to summarise the output of the simulation
@@ -347,19 +360,23 @@ log_plot <- function(solutions, type = "mean") {
   } else {
     stop("type must be either 'median' or 'mean'")
   }
-  filtered <- filter(summary, variable %in% c("S", "R1", "R2", "R12"))
+  # filtered <- filter(summary, variable %in% c("S", "R1", "R2", "R12"))
+  filtered <- summary %>%
+    filter(variable %in% c("S", "R1", "R2", "R12")) %>%
+    mutate(variable = factor(variable, levels = c("S", "R1", "R2", "R12"))) %>%
+    arrange(variable)
   # Initialise the colours
   colors <- c("black", "navy", "#800000", "#008000")
   # Create antibiotic concentrations data frame
-  times <- unique(solutions$time)
-  background_df <- data.frame(
-    xmin = times[-length(times)],
-    xmax = times[-1],
-    A1 = solutions[solutions$rep == 1 & solutions$variable == "A1", "value"][-1] /
-      max(solutions[solutions$variable == "A1", "value"]),
-    A2 = solutions[solutions$rep == 1 & solutions$variable == "A2", "value"][-1] /
-      max(solutions[solutions$variable == "A2", "value"])
-  )
+  background_df <- solutions %>%
+    filter(rep == 1 & variable %in% c("A1", "A2")) %>%
+    group_by(variable) %>%
+    mutate(value = value / max(value)) %>%
+    ungroup() %>%
+    pivot_wider(names_from = variable, values_from = value) %>%
+    mutate(xmin = lag(time), xmax = time) %>%
+    filter(!is.na(xmin)) %>%
+    select(xmin, xmax, A1, A2)
   peak <- max(solutions$value, na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
@@ -412,7 +429,4 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(freq = 100/15, D = exp(-40/15), HGT = 0, time = 100, rep = 1), type = "all"))
-# log_plot(simulate(), type = "all")
-# sols = simulate(freq=33,rep=1,dt=0.01)
-# tail(sols[sols$variable=="S",],110)
+system.time(log_plot(simulate(freq = 100/15, D = exp(-40/15), HGT = 0, time = 100, rep = 1), type = "all"))
