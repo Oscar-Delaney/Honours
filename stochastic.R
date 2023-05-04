@@ -258,7 +258,7 @@ simulate <- function(
   d2 = log(2) / 3.5, # rate of drug 2 elimination
   influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
-  init = c(S = 1e10, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
+  init = c(S = 1e12, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
   psi = 0.3 * c(1, 1, 1, 1), # growth rate with no drugs
   phi1 = 2 * psi, # maximum reduction in fitness for drug 1
   phi2 = 2 * psi, # maximum reduction in fitness for drug 2
@@ -268,7 +268,7 @@ simulate <- function(
   kappa2 = c(1, 1, 1, 1), # Hill function steepness parameter drug 2
   theta = c(0, 0, 0, 0), # drug interaction term
   mu = 0.88 * c(1, 0.9, 0.9, 0.81), # growth rate with infinite resources
-  k = c(100, 100, 100, 100), # resource concentration at half-maximal growth
+  k = 1e14 * c(1, 1, 1, 1), # resource concentration at half-maximal growth
   alpha = c(1, 1, 1, 1) # resources used per unit growth
   ) {
   # Define the parameters of the model
@@ -412,7 +412,7 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(freq = 17, D = 1e-5, time = 100, rep = 10, dt = 0.1)))
+# system.time(log_plot(simulate(freq = 100/15, D = exp(-40/15), HGT = 0, time = 100, rep = 1), type = "all"))
 # log_plot(simulate(), type = "all")
 # sols = simulate(freq=33,rep=1,dt=0.01)
 # tail(sols[sols$variable=="S",],110)
