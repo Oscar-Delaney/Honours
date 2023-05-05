@@ -106,9 +106,8 @@ rates <- function(state, config, t) {
 
 # a function to convert the transition rates into an ODE function
 ode_rates <- function(t, state, config) {
-  adaptivetau_rates = rates(state, config, t)
-  ode_rates_xyz <- with(as.list(adaptivetau_rates),{
-    c(
+  with(as.list(rates(state, config, t)),{
+    return(list(c(
       S = S_growth - S_death + HGT_MDR_gain - HGT_MDR_loss,
       R1 = R1_growth - R1_death - HGT_MDR_gain + HGT_MDR_loss,
       R2 = R2_growth - R2_death - HGT_MDR_gain + HGT_MDR_loss,
@@ -116,9 +115,8 @@ ode_rates <- function(t, state, config) {
       N = -N_depletion,
       A1 = -A1_depletion,
       A2 = -A2_depletion
-    )
+    )))
   })
-  return(list(ode_rates_xyz))
 }
 
 # a function to implement one run of the model
@@ -128,8 +126,9 @@ single_run <- function(config, x) {
     transitions <- make_transitions()
     # Initialise the state variables
     state <- c(init, N = N0, influx * pattern)
+    time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     t <- 0
-    while (t < max(time_grid)) {
+    while (t < time) {
       # Run the model between bottlenecks, deterministically or stochastically
       if (deterministic) {
         times <- time_grid[time_grid <= freq]
@@ -147,19 +146,17 @@ single_run <- function(config, x) {
       # Update the time
       t <- t + freq
       # Run the bottleneck and update the state
-      if (stewardship == "cycl" && (t / freq) %% dose_rep == 0) {
+      if (cycl && (t / freq) %% dose_rep == 0) {
         config$pattern <- 1 - config$pattern
       }
       state <- bottleneck(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
-    variables <- c("S", "R1", "R2", "R12", "N", "A1", "A2")
-    approx_vars <- lapply(variables, function(var) {
+    approx_vars <- lapply(colnames(solution), function(var) {
       approx(solution[, "time"], solution[, var], xout = time_grid)$y
     })
     solution_interpolated <- data.frame(
-      time = time_grid,
-      setNames(approx_vars, variables),
+      setNames(approx_vars, colnames(solution)),
       rep = x
     )
     return(solution_interpolated)
@@ -171,7 +168,7 @@ simulate <- function(
   rep = 1,
   dose_rep = 1,
   deterministic = FALSE, # should be either TRUE or FALSE
-  stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
+  cycl = TRUE, # should be either TRUE or FALSE
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
   freq = 10, # frequency of bottlenecks, in hours
@@ -198,29 +195,8 @@ simulate <- function(
   alpha = c(1, 1, 1, 1) # resources used per unit growth
   ) {
   # Define the parameters of the model
-  config <- list(
-    D = D,
-    N0 = N0,
-    init = init,
-    HGT = HGT,
-    m1 = m1,
-    m2 = m2,
-    d1 = d1,
-    d2 = d2,
-    influx = influx,
-    stewardship = stewardship,
-    deterministic = deterministic,
-    dose_rep = dose_rep,
-    freq = freq,
-    time_grid = seq(0, time, by = dt) # a common time grid for all runs
-  )
-  if (stewardship == "2_only") {
-    config$pattern <- c(0, 1)
-  } else if (stewardship == "comb") {
-    config$pattern <- c(1, 1)
-  } else {
-    config$pattern <- c(1, 0)
-  }
+  config <- as.list(environment())
+  config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
   config$params <- cbind(psi, phi1, phi2, zeta1, zeta2,
     kappa1, kappa2, theta, mu, k, alpha)
   rownames(config$params) <- c("S", "R1", "R2", "R12")
@@ -344,13 +320,3 @@ log_plot <- function(solutions, type = "mean") {
 }
 
 system.time(log_plot(simulate(dose_rep = 7, deterministic = F, time = 100, rep = 1), type = "all"))
-system.time(simulate(dose_rep = 7, deterministic = T, time = 100, rep = 1000))
-sol$value[7001:7007]
-# old
-# > sol$value[7001:7007]
-# [1] 2.008323e+14 7.518872e+13 1.713794e+10 7.624686e+09 1.822959e+12
-# [6] 2.317572e-06 8.816358e-01
-# new
-# > sol$value[7001:7007]
-# [1] 2.008323e+14 7.518872e+13 1.713794e+10 7.624686e+09 1.822959e+12
-# [6] 2.317572e-06 8.816358e-01
