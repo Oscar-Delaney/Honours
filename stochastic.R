@@ -7,11 +7,13 @@ library(future.apply)
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, params) {
-  psi <- params[1]
-  phi <- params[2]
-  zeta <- params[3]
-  kappa <- params[4]
-  return(phi * (A / zeta)^kappa / ((A / zeta)^kappa - (psi - phi) / psi))
+  # code to extract the individual parameters
+  with(as.list(sapply(c("psi", "phi", "zeta", "kappa"), function(x) {
+    x <- unname(params[grep(x, names(params))])
+  })), {
+    # compute the actual hill function
+    return(phi * (A / zeta)^kappa / ((A / zeta)^kappa - (psi - phi) / psi))
+  })
 }
 
 # interaction between the two drugs
@@ -30,22 +32,15 @@ death <- function(A1, A2, params) {
 
 # a growth rate function for nutrient-limited growth
 monod <- function(N, params) {
-  mu <- params[1]
-  k <- params[2]
-  return(mu * N / (N + k))
-}
-
-# a function specifying the amount of nutrients depleted by the bacteria
-deplete <- function(state, alpha, monod_params) {
-  return(sum(sapply(seq_along(alpha), function(i) {
-    alpha[i] * monod(state["N"], monod_params[i, ]) * state[i]
-  })))
+  with(as.list(params), {
+    return(mu * N / (N + k))
+  })
 }
 
 # a function that reduces all populations by a factor of D, in expectation
 bottleneck <- function(state, config) {
-  pops <- state[rownames(params)]
   with(config, {
+    pops <- state[rownames(params)]
     if (deterministic) {
       diluted <- pops * D
     } else {
@@ -68,9 +63,6 @@ make_transitions <- function() {
   R1_death = c(R1 = -1),
   R2_death = c(R2 = -1),
   R12_death = c(R12 = -1),
-  R1_mutation = c(R1 = +1),
-  R2_mutation = c(R2 = +1),
-  R12_mutation = c(R12 = +1),
   HGT_MDR_loss = c(S = -1, R1 = +1, R2 = +1, R12 = -1),
   HGT_MDR_gain = c(S = +1, R1 = -1, R2 = -1, R12 = +1),
   N_depletion = c(N = -1),
@@ -79,90 +71,35 @@ make_transitions <- function() {
 ))
 }
 
-with(as.list(c(state, config)), {
-  # compute the rates
-  
-  death_rates <- 
-})
-
-
 # compute the rate at which each transition occurs
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- sapply(rownames(params), function(x) {
-      monod(N, params[x, c("mu", "k")])
-    }, USE.NAMES = TRUE)
-
-    # Calculate death rates
-    death_rates <- mapply(function(x, p) {
-      x * death(A1 = A1, A2 = A2, p)
-    }, c(S, R1, R2, R12), params[rownames(params), ], USE.NAMES = TRUE)
-
-    # Calculate mutation rates
-    mutation_matrix <- matrix(c(
-      S  = c(1 - m1, 1 - m2, m1 * m2),
-      R1 = c(0, 0, m2),
-      R2 = c(0, m1, 0),
-      R12 = c(0, 0, 1)
-    ), nrow = 4, byrow = TRUE)
-    mutation_rates <- crossprod(mutation_matrix, state * replication_rates)
-    names(mutation_rates) <- c("R1_mutation", "R2_mutation", "R12_mutation")
-
-    # Calculate other rates
-    HGT_rates <- c(HGT_MDR_loss = HGT * R12 * S, HGT_MDR_gain = HGT * R1 * R2)
-    N_depletion <- deplete(state, params[, "alpha"], params[, c("mu", "k")])
-    A_depletion <- c(A1_depletion = d1 * A1, A2_depletion = d2 * A2)
-
-    # Combine all rates and return
-    rate_list <- c(replication_rates, death_rates, mutation_rates, HGT_rates, N_depletion, A_depletion)
-    return(setNames(rate_list, names(make_transitions())))
-  })
-    # compute the rates
     replication_rates <- sapply(rownames(params), function(var) {
-      state[var] * monod(N, params[var, c("mu", "k")])
+      get(var) * monod(N, params[var, c("mu", "k")])
     })
-    rates_list <- c(
-      S_growth = S * (1 - m1) * (1 - m2) * replication_rates["S"],
-      R1_growth = R1 * (1 - m2) * replication_rates["R1"],
-      R2_growth = R2 * (1 - m1) * replication_rates["R2"],
-      R12_growth = R12 * replication_rates["R12"],
-      sapply(rownames(params), function(var) {
-        state[var] * death(A1 = A1, A2 = A2, params[var, ])
-      }),
-      HGT_MDR_loss = S * m1 * m2 * replication_rates["S"] +
-        R1 * m2 * replication_rates["R1"] +
-        R2 * m1 * replication_rates["R2"] +
-        R12 * replication_rates["R12"],
-      HGT_MDR_gain = S * m1 * m2 * replication_rates["S"] +
-        R1 * m2 * replication_rates["R1"] +
-        R2 * m1 * replication_rates["R2"] +
-        R12 * replication_rates["R12"],
-      N_depletion = N * deplete(state, alpha, params[, c("mu", "k")]),
-      A1_depletion = A1 * deplete(state, alpha, params[, c("mu", "k")]),
-      A2_depletion = A2 * deplete(state, alpha, params[, c("mu", "k")])
-    )
-    )
-    rate_list <- c(
-      S_growth = S * (1 - m1) * (1 - m2) * monod(N, params["S", c("mu", "k")]),
-      R1_growth = R1 * (1 - m2) * monod(N, params["R1", c("mu", "k")]),
-      R2_growth = R2 * (1 - m1) * monod(N, params["R2", c("mu", "k")]),
-      R12_growth = R12 * monod(N, params["R12", c("mu", "k")]),
-      S_death = S * death(A1 = A1, A2 = A2, params["S", ]),
-      R1_death = R1 * death(A1 = A1, A2 = A2, params["R1", ]),
-      R2_death = R2 * death(A1 = A1, A2 = A2, params["R2", ]),
-      R12_death = R12 * death(A1 = A1, A2 = A2, params["R12", ]),
-      R1_mutation = S * m1 * (1 - m2) * monod(N, params["S", c("mu", "k")]),
-      R2_mutation = S * m2 * (1 - m1) * monod(N, params["S", c("mu", "k")]),
-      R12_mutation = S * m1 * m2 * monod(N, params["S", c("mu", "k")]) +
-        R1 * m2 * monod(N, params["R1", c("mu", "k")]) +
-        R2 * m1 * monod(N, params["R2", c("mu", "k")]),
-      HGT_MDR_loss = HGT * R12 * S,
-      HGT_MDR_gain = HGT * R1 * R2,
-      N_depletion = deplete(state, params[, "alpha"], params[, c("mu", "k")]),
-      A1_depletion = d1 * A1,
-      A2_depletion = d2 * A2
-    )
+    # chance of a replication in row i resulting in a strain j cell
+    mutation <- matrix(c(
+      S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
+      R1 = c(0, 1 - m2, 0, m2),
+      R2 = c(0, 0, 1 - m1, m1),
+      R12 = c(0, 0, 0, 1)
+    ), nrow = 4, byrow = TRUE)
+    # Calculate growth rates including mutations
+    growth_rates <- replication_rates %*% mutation
+    # Calculate death rates
+    death_rates <- sapply(rownames(params), function(var) {
+      get(var) * death(A1 = A1, A2 = A2, params[var, ])
+    })
+    # Calculate other rates
+    HGT_MDR_loss <- HGT * R12 * S
+    HGT_MDR_gain <- HGT * R1 * R2
+    N_depletion <- replication_rates %*% params[, "alpha"]
+    A1_depletion <- d1 * A1
+    A2_depletion <- d2 * A2
+    # Combine all rates and return
+    rate_list <- c(growth_rates, death_rates, HGT_MDR_loss, HGT_MDR_gain,
+      N_depletion, A1_depletion, A2_depletion)
     return(setNames(rate_list, names(make_transitions())))
   })
 }
@@ -173,9 +110,9 @@ ode_rates <- function(t, state, config) {
   ode_rates_xyz <- with(as.list(adaptivetau_rates),{
     c(
       S = S_growth - S_death + HGT_MDR_gain - HGT_MDR_loss,
-      R1 = R1_growth - R1_death + R1_mutation - HGT_MDR_gain + HGT_MDR_loss,
-      R2 = R2_growth - R2_death + R2_mutation - HGT_MDR_gain + HGT_MDR_loss,
-      R12 = R12_growth - R12_death + R12_mutation + HGT_MDR_gain - HGT_MDR_gain,
+      R1 = R1_growth - R1_death - HGT_MDR_gain + HGT_MDR_loss,
+      R2 = R2_growth - R2_death - HGT_MDR_gain + HGT_MDR_loss,
+      R12 = R12_growth - R12_death + HGT_MDR_gain - HGT_MDR_gain,
       N = -N_depletion,
       A1 = -A1_depletion,
       A2 = -A2_depletion
@@ -406,4 +343,14 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(dose_rep = 7, deterministic = T, time = 100, rep = 1), type = "all"))
+system.time(log_plot(simulate(dose_rep = 7, deterministic = F, time = 100, rep = 1), type = "all"))
+system.time(simulate(dose_rep = 7, deterministic = T, time = 100, rep = 1000))
+sol$value[7001:7007]
+# old
+# > sol$value[7001:7007]
+# [1] 2.008323e+14 7.518872e+13 1.713794e+10 7.624686e+09 1.822959e+12
+# [6] 2.317572e-06 8.816358e-01
+# new
+# > sol$value[7001:7007]
+# [1] 2.008323e+14 7.518872e+13 1.713794e+10 7.624686e+09 1.822959e+12
+# [6] 2.317572e-06 8.816358e-01
