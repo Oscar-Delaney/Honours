@@ -42,40 +42,19 @@ deplete <- function(state, alpha, monod_params) {
   })))
 }
 
-# update the pattern based on the previous drug administered, under cycling
-update_pattern <- function(prev = 1) {
-  # if the previous drug administered was 1, then the next drug is 2
-  if (prev == 1) {
-    return(c(0, 1))
-  }
-  return(c(1, 0))
-}
-
 # a function that reduces all populations by a factor of D, in expectation
-bottleneck <- function(state,
-  pattern = c(1, 1),
-  D = 0.1,
-  N0 = 100,
-  influx = c(10, 10),
-  cycl = FALSE,
-  deterministic = FALSE) {
-  if (cycl) {
-    pattern <- update_pattern(state["prev"])
-  }
-  populations <- state[c("S", "R1", "R2", "R12")]
-  if (deterministic) {
-    diluted <- populations * D
-  } else {
-    diluted <- rbinom(length(populations), populations, D)
-  }
-  new_state <- c(diluted, state["N"] * D + N0 * (1 - D),
-    state[c("A1", "A2")] * D + influx * pattern * (1 - D),
-    state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
-  # if (!deterministic) {
-  #   new_state <- round(new_state)
-  # }
-  names(new_state) <- c("S", "R1", "R2", "R12", "N", "A1", "A2", "prev")
-  return(new_state)
+bottleneck <- function(state, config) {
+  pops <- state[rownames(params)]
+  with(config, {
+    if (deterministic) {
+      diluted <- pops * D
+    } else {
+      diluted <- setNames(rbinom(length(pops), pops, D), names(pops))
+    }
+    new_state <- c(diluted, state["N"] * D + N0 * (1 - D),
+    state[c("A1", "A2")] * D + influx * pattern * (1 - D))
+    return(new_state)
+  })
 }
 
 # a function outputting the transitions that can occur in the model
@@ -100,59 +79,92 @@ make_transitions <- function() {
 ))
 }
 
-# computing transition rates, given the current state and parameters
+with(as.list(c(state, config)), {
+  # compute the rates
+  
+  death_rates <- 
+})
+
+
+# compute the rate at which each transition occurs
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
-    # extract the parameters
-    params <- config$params
-    # extract the current state
-    S <- state["S"]
-    R1 <- state["R1"]
-    R2 <- state["R2"]
-    R12 <- state["R12"]
-    N <- state["N"]
-    A1 <- state["A1"]
-    A2 <- state["A2"]
-    # compute the rates
-    S_growth <- S * (1 - config$m1) * (1 - config$m2) * monod(N, params["S", c("mu", "k")])
-    R1_growth <- R1 * (1 - config$m2) * monod(N, params["R1", c("mu", "k")])
-    R2_growth <- R2 * (1 - config$m1) * monod(N, params["R2", c("mu", "k")])
-    R12_growth <- R12 * monod(N, params["R12", c("mu", "k")])
-    S_death <- S * death(A1 = A1, A2 = A2, params["S", ])
-    R1_death <- R1 * death(A1 = A1, A2 = A2, params["R1", ])
-    R2_death <- R2 * death(A1 = A1, A2 = A2, params["R2", ])
-    R12_death <- R12 * death(A1 = A1, A2 = A2, params["R12", ])
-    R1_mutation <- S * config$m1 * (1 - config$m2) * monod(N, params["S", c("mu", "k")])
-    R2_mutation <- S * config$m2 * (1 - config$m1) * monod(N, params["S", c("mu", "k")])
-    R12_mutation <- S * config$m1 * config$m2 * monod(N, params["S", c("mu", "k")]) +
-      R1 * config$m2 * monod(N, params["R1", c("mu", "k")]) +
-      R2 * config$m1 * monod(N, params["R2", c("mu", "k")])
-    HGT_MDR_loss <- config$HGT * R12 * S
-    HGT_MDR_gain <- config$HGT * R1 * R2
-    N_depletion <- deplete(state, params[, "alpha"], params[, c("mu", "k")])
-    A1_depletion <- config$d1 * A1
-    A2_depletion <- config$d2 * A2
-    # return the rates
-    return(c(
-      S_growth = unname(S_growth),
-      R1_growth = unname(R1_growth),
-      R2_growth = unname(R2_growth),
-      R12_growth = unname(R12_growth),
-      S_death = unname(S_death),
-      R1_death = unname(R1_death),
-      R2_death = unname(R2_death),
-      R12_death = unname(R12_death),
-      R1_mutation = unname(R1_mutation),
-      R2_mutation = unname(R2_mutation),
-      R12_mutation = unname(R12_mutation),
-      HGT_MDR_loss = unname(HGT_MDR_loss),
-      HGT_MDR_gain = unname(HGT_MDR_gain),
-      N_depletion = unname(N_depletion),
-      A1_depletion = unname(A1_depletion),
-      A2_depletion = unname(A2_depletion)
-    ))
-  })
+    # Calculate replication rates
+    replication_rates <- sapply(rownames(params), function(x) {
+      monod(N, params[x, c("mu", "k")])
+    }, USE.NAMES = TRUE)
 
+    # Calculate death rates
+    death_rates <- mapply(function(x, p) {
+      x * death(A1 = A1, A2 = A2, p)
+    }, c(S, R1, R2, R12), params[rownames(params), ], USE.NAMES = TRUE)
+
+    # Calculate mutation rates
+    mutation_matrix <- matrix(c(
+      S  = c(1 - m1, 1 - m2, m1 * m2),
+      R1 = c(0, 0, m2),
+      R2 = c(0, m1, 0),
+      R12 = c(0, 0, 1)
+    ), nrow = 4, byrow = TRUE)
+    mutation_rates <- crossprod(mutation_matrix, state * replication_rates)
+    names(mutation_rates) <- c("R1_mutation", "R2_mutation", "R12_mutation")
+
+    # Calculate other rates
+    HGT_rates <- c(HGT_MDR_loss = HGT * R12 * S, HGT_MDR_gain = HGT * R1 * R2)
+    N_depletion <- deplete(state, params[, "alpha"], params[, c("mu", "k")])
+    A_depletion <- c(A1_depletion = d1 * A1, A2_depletion = d2 * A2)
+
+    # Combine all rates and return
+    rate_list <- c(replication_rates, death_rates, mutation_rates, HGT_rates, N_depletion, A_depletion)
+    return(setNames(rate_list, names(make_transitions())))
+  })
+    # compute the rates
+    replication_rates <- sapply(rownames(params), function(var) {
+      state[var] * monod(N, params[var, c("mu", "k")])
+    })
+    rates_list <- c(
+      S_growth = S * (1 - m1) * (1 - m2) * replication_rates["S"],
+      R1_growth = R1 * (1 - m2) * replication_rates["R1"],
+      R2_growth = R2 * (1 - m1) * replication_rates["R2"],
+      R12_growth = R12 * replication_rates["R12"],
+      sapply(rownames(params), function(var) {
+        state[var] * death(A1 = A1, A2 = A2, params[var, ])
+      }),
+      HGT_MDR_loss = S * m1 * m2 * replication_rates["S"] +
+        R1 * m2 * replication_rates["R1"] +
+        R2 * m1 * replication_rates["R2"] +
+        R12 * replication_rates["R12"],
+      HGT_MDR_gain = S * m1 * m2 * replication_rates["S"] +
+        R1 * m2 * replication_rates["R1"] +
+        R2 * m1 * replication_rates["R2"] +
+        R12 * replication_rates["R12"],
+      N_depletion = N * deplete(state, alpha, params[, c("mu", "k")]),
+      A1_depletion = A1 * deplete(state, alpha, params[, c("mu", "k")]),
+      A2_depletion = A2 * deplete(state, alpha, params[, c("mu", "k")])
+    )
+    )
+    rate_list <- c(
+      S_growth = S * (1 - m1) * (1 - m2) * monod(N, params["S", c("mu", "k")]),
+      R1_growth = R1 * (1 - m2) * monod(N, params["R1", c("mu", "k")]),
+      R2_growth = R2 * (1 - m1) * monod(N, params["R2", c("mu", "k")]),
+      R12_growth = R12 * monod(N, params["R12", c("mu", "k")]),
+      S_death = S * death(A1 = A1, A2 = A2, params["S", ]),
+      R1_death = R1 * death(A1 = A1, A2 = A2, params["R1", ]),
+      R2_death = R2 * death(A1 = A1, A2 = A2, params["R2", ]),
+      R12_death = R12 * death(A1 = A1, A2 = A2, params["R12", ]),
+      R1_mutation = S * m1 * (1 - m2) * monod(N, params["S", c("mu", "k")]),
+      R2_mutation = S * m2 * (1 - m1) * monod(N, params["S", c("mu", "k")]),
+      R12_mutation = S * m1 * m2 * monod(N, params["S", c("mu", "k")]) +
+        R1 * m2 * monod(N, params["R1", c("mu", "k")]) +
+        R2 * m1 * monod(N, params["R2", c("mu", "k")]),
+      HGT_MDR_loss = HGT * R12 * S,
+      HGT_MDR_gain = HGT * R1 * R2,
+      N_depletion = deplete(state, params[, "alpha"], params[, c("mu", "k")]),
+      A1_depletion = d1 * A1,
+      A2_depletion = d2 * A2
+    )
+    return(setNames(rate_list, names(make_transitions())))
+  })
 }
 
 # a function to convert the transition rates into an ODE function
@@ -166,8 +178,7 @@ ode_rates <- function(t, state, config) {
       R12 = R12_growth - R12_death + R12_mutation + HGT_MDR_gain - HGT_MDR_gain,
       N = -N_depletion,
       A1 = -A1_depletion,
-      A2 = -A2_depletion,
-      prev = 0
+      A2 = -A2_depletion
     )
   })
   return(list(ode_rates_xyz))
@@ -175,61 +186,53 @@ ode_rates <- function(t, state, config) {
 
 # a function to implement one run of the model
 single_run <- function(config, x) {
-  # Define the transitions of the model
-  transitions <- make_transitions()
-  # Initialise the state variables
-  state <- c(config$init, N = config$N0, config$influx * config$pattern,
-      prev = sum(config$pattern * c(1, 2)))
-  t <- 0
-  while (t < max(config$time_grid)) {
-    # Run the model between bottlenecks, deterministically or stochastically
-    if (config$deterministic) {
-      times <- config$time_grid[config$time_grid <= config$freq]
-      new_solution <- ode(state, times, ode_rates, config)
-    } else {
-      new_solution <- ssa.adaptivetau(
-        state, transitions, rates, config, tf = config$freq,
-        deterministic = grep("deplet", names(transitions))
-      )
+  with(config, {
+    # Define the transitions of the model
+    transitions <- make_transitions()
+    # Initialise the state variables
+    state <- c(init, N = N0, influx * pattern)
+    t <- 0
+    while (t < max(time_grid)) {
+      # Run the model between bottlenecks, deterministically or stochastically
+      if (deterministic) {
+        times <- time_grid[time_grid <= freq]
+        new <- ode(state, times, ode_rates, config)
+      } else {
+        new <- ssa.adaptivetau(
+          state, transitions, rates, config, tf = freq,
+          deterministic = grep("deplet", names(transitions))
+        )
+      }
+      # Make the time column reflect the overall time accurately
+      new[, "time"] <- new[, "time"] + t
+      # Update the solution
+      solution <- if (t == 0) new else rbind(solution, new[-1, ])
+      # Update the time
+      t <- t + freq
+      # Run the bottleneck and update the state
+      if (stewardship == "cycl" && (t / freq) %% dose_rep == 0) {
+        config$pattern <- 1 - config$pattern
+      }
+      state <- bottleneck(new[nrow(new), ], config)
     }
-    # Make the time column reflect the overall time accurately
-    new_solution[, 1] <- new_solution[, 1] + t
-    # Run the bottleneck and update the state
-    state <- bottleneck(
-      state = new_solution[nrow(new_solution), ],
-      pattern = config$pattern,
-      D = config$D,
-      N0 = config$N0,
-      influx = config$influx,
-      cycl = config$stewardship == "cycl",
-      deterministic = config$deterministic
+    # Interpolate the solution to the common time grid
+    variables <- c("S", "R1", "R2", "R12", "N", "A1", "A2")
+    approx_vars <- lapply(variables, function(var) {
+      approx(solution[, "time"], solution[, var], xout = time_grid)$y
+    })
+    solution_interpolated <- data.frame(
+      time = time_grid,
+      setNames(approx_vars, variables),
+      rep = x
     )
-
-    # Update the solution
-    if (t == 0) {
-      solution <- new_solution
-    } else {
-      solution <- rbind(solution, new_solution[-1, ])
-    }
-    # Update the time
-    t <- t + config$freq
-  }
-  # Interpolate the solution to the common time grid
-  variables <- c("S", "R1", "R2", "R12", "N", "A1", "A2")
-  approx_vars <- lapply(variables, function(var) {
-    approx(solution[, "time"], solution[, var], xout = config$time_grid)$y
+    return(solution_interpolated)
   })
-  solution_interpolated <- data.frame(
-    time = config$time_grid,
-    setNames(approx_vars, variables),
-    rep = x
-  )
-  return(solution_interpolated)
 }
 
 # a function to simulate the model
 simulate <- function(
   rep = 1,
+  dose_rep = 1,
   deterministic = FALSE, # should be either TRUE or FALSE
   stewardship = "cycl", #  "cycl" or "comb" or "1_only" or "2_only"
   time = 100, # time to simulate, in hours
@@ -270,6 +273,7 @@ simulate <- function(
     influx = influx,
     stewardship = stewardship,
     deterministic = deterministic,
+    dose_rep = dose_rep,
     freq = freq,
     time_grid = seq(0, time, by = dt) # a common time grid for all runs
   )
@@ -402,4 +406,4 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(deterministic = F, time = 100, rep = 1), type = "all"))
+system.time(log_plot(simulate(dose_rep = 7, deterministic = T, time = 100, rep = 1), type = "all"))
