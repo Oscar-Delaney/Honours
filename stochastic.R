@@ -4,7 +4,6 @@ library(tidyverse)
 library(ggnewscale)
 library(future)
 library(future.apply)
-N_adj <- 100 # hacky fix to non-negative N requirement in adaptivatau
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, params) {
@@ -33,7 +32,6 @@ death <- function(A1, A2, params) {
 monod <- function(N, params) {
   mu <- params[1]
   k <- params[2]
-  N <- max(0,N - N_adj)
   return(mu * N / (N + k))
 }
 
@@ -70,12 +68,12 @@ bottleneck <- function(state,
   } else {
     diluted <- rbinom(length(populations), populations, D)
   }
-  new_state <- c(diluted, N0 + (state["N"] - N_adj) * D,
+  new_state <- c(diluted, state["N"] * D + N0 * (1 - D),
     state[c("A1", "A2")] * D + influx * pattern * (1 - D),
     state["prev"] %% 2 + 1) # update the previous drug from 2 to 1 or 1 to 2
-  if (!deterministic) {
-    new_state <- round(new_state)
-  }
+  # if (!deterministic) {
+  #   new_state <- round(new_state)
+  # }
   names(new_state) <- c("S", "R1", "R2", "R12", "N", "A1", "A2", "prev")
   return(new_state)
 }
@@ -217,40 +215,15 @@ single_run <- function(config, x) {
     t <- t + config$freq
   }
   # Interpolate the solution to the common time grid
-  solution_tibble <- as_tibble(solution) %>%
-    pivot_longer(cols = -time, names_to = "variable", values_to = "value")
-    
-
-  # Define the time values at which you want to interpolate
-  new_times <- seq(0, 1, by = 0.00125)
-
-  # Group the data by variable, interpolate the values at new_times,
-  # and create a new tibble
-  solution_interpolated_new <- solution_interpolated %>%
-    group_by(variable) %>%
-      summarise(interpolated_value = approx(time, value, xout = new_times)$y) %>%
-      ungroup()
-
-  solution_interpolated <- solution_tibble %>%
-    group_by(variable) %>%
-    summarise(interpolated_value = approx(time, value, xout = config$time_grid, n = length(config$time_grid))$y) %>%
-    ungroup() %>%
-    pivot_wider(names_from = variable, values_from = interpolated_value) %>%
-    mutate(rep = x)
-  # solution <- as.data.frame(solution)
-  # solution <- data.frame(
-  #   time = config$time_grid,
-  #   S = approx(solution$time, solution$S, xout = config$time_grid)$y,
-  #   R1 = approx(solution$time, solution$R1, xout = config$time_grid)$y,
-  #   R2 = approx(solution$time, solution$R2, xout = config$time_grid)$y,
-  #   R12 = approx(solution$time, solution$R12, xout = config$time_grid)$y,
-  #   N = approx(solution$time, solution$N, xout = config$time_grid)$y,
-  #   A1 = approx(solution$time, solution$A1, xout = config$time_grid,
-  #     method = "constant", f = 1)$y,
-  #   A2 = approx(solution$time, solution$A2, xout = config$time_grid,
-  #     method = "constant", f = 1)$y,
-  #   rep = x
-  # )
+  variables <- c("S", "R1", "R2", "R12", "N", "A1", "A2")
+  approx_vars <- lapply(variables, function(var) {
+    approx(solution[, "time"], solution[, var], xout = config$time_grid)$y
+  })
+  solution_interpolated <- data.frame(
+    time = config$time_grid,
+    setNames(approx_vars, variables),
+    rep = x
+  )
   return(solution_interpolated)
 }
 
@@ -287,7 +260,7 @@ simulate <- function(
   # Define the parameters of the model
   config <- list(
     D = D,
-    N0 = N0 + N_adj, # hacky adjustment to avoid adaptivetau nonnegative issue
+    N0 = N0,
     init = init,
     HGT = HGT,
     m1 = m1,
@@ -315,7 +288,7 @@ simulate <- function(
   solutions <- bind_rows(future_lapply(1:rep, function(x) {
     single_run(config, x)},
     future.seed = TRUE))
-  return(pivot_longer(solutions), cols = -c(time, rep), names_to = "variable")
+  return(pivot_longer(solutions, cols = -c(time, rep), names_to = "variable"))
 }
 
 # A function to summarise the output of the simulation
@@ -429,4 +402,4 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(freq = 100/15, D = exp(-40/15), HGT = 0, time = 100, rep = 1), type = "all"))
+system.time(log_plot(simulate(deterministic = F, time = 100, rep = 1), type = "all"))
