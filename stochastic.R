@@ -24,16 +24,14 @@ death <- function(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta) {
 }
 
 # a growth rate function for nutrient-limited growth
-monod <- function(N, params) {
-  with(as.list(params), {
-    return(mu * N / (N + k))
-  })
+monod <- function(N, mu, k) {
+  return(mu * 1 / (1 + k / N))
 }
 
 # a function that reduces all populations by a factor of D, in expectation
 bottleneck <- function(state, config) {
   with(config, {
-    pops <- state[rownames(params)]
+    pops <- state[names(init)] # extract just the cell counts
     if (deterministic) {
       diluted <- pops * D
     } else {
@@ -68,9 +66,7 @@ make_transitions <- function() {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- sapply(rownames(params), function(var) {
-      get(var) * monod(N, params[var, c("mu", "k")])
-    })
+    replication_rates <- state[names(init)] * monod(N, mu, k)
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
       S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
@@ -81,14 +77,12 @@ rates <- function(state, config, t) {
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate death rates
-    death_rates <- sapply(rownames(params), function(x) {
-      return(get(x) * death(A1, phi1[x], zeta1[x], kappa1[x],
-        A2, phi2[x], zeta2[x], kappa2[x], theta[x]))
-    })
+    death_rates <- state[names(init)] * death(A1, phi1, zeta1, kappa1,
+      A2, phi2, zeta2, kappa2, theta)
     # Calculate other rates
     HGT_MDR_loss <- HGT * R12 * S
     HGT_MDR_gain <- HGT * R1 * R2
-    N_depletion <- replication_rates %*% params[, "alpha"]
+    N_depletion <- replication_rates %*% alpha
     A1_depletion <- d1 * A1
     A2_depletion <- d2 * A2
     # Combine all rates and return
@@ -189,10 +183,8 @@ simulate <- function(
   ) {
   # Define the parameters of the model
   config <- as.list(environment())
+  config$influx <- influx * c(zeta1["S"], zeta2["S"]) # normalise units
   config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
-  config$params <- cbind(psi, phi1, phi2, zeta1, zeta2,
-    kappa1, kappa2, theta, mu, k, alpha)
-  rownames(config$params) <- c("S", "R1", "R2", "R12")
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
   solutions <- bind_rows(future_lapply(1:rep, function(x) {
