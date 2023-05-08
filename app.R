@@ -16,27 +16,27 @@ drugs_text <- "A1 and A2 are arbitrary antibiotics. The mutation rate
 is the proportion of genome replications that result in resistance to 
 that drug. The elimination rate is the rate at which the drug degenerates
 in the body, in units of hours^-1. The influx is the concentration of
-each drug added at bottleneck event."
+each drug added at bottleneck events, in units of zeta (see pharmacodynamics).
+The recombination rate determines the rate at which the S + R12 <--> R1 + R2
+reversible reaction occurs, with reasonable values being <1e-13 or so."
 
 growth_text <- "The rows represent four bacterial strains: Susceptible, 
 Antibiotic_1 resistant, Antibiotic_2 resistant, and double resistant. 
-init is the starting population size of each straing. Mu is the growth
+Init is the starting population size of each straing. Mu is the growth
 rate with unlimited nutrients. K is the nutrient concentration that produces 
-half-maximal growth rate. alpha is the amount of nutrient used per new
+half the maximal growth rate. Alpha is the amount of nutrients used per new
 bacterial cell."
 
-pd_text <- "Psi is the growth rate in the absence of antibiotics.
-Phi_i is the maximum reduction in growth rate caused by antibiotic i.
-Zeta_i is the minimum inhibitory concentration of antibiotic i.
-Kappa_i is the shape parameter, with smaller values representing a
-shallower reduction in growth rate as antibiotic concentration increases, and 
-larger values representing a steeper reduction in growth rate around the MIC.
-Theta is the drug-drug interaction parameter, with values between -1 and 1."
+pd_text <- "Phi_i is the maximum reduction in growth rate caused by
+antibiotic i. Zeta_i is the concentration of antibiotic i resulting in half
+the maximal death rate. Kappa_i is the shape parameter, with smaller values
+representing a steep initial increase in death rate, and shallow gradient about
+zeta_i. Theta is the drug-drug interaction parameter, in the range [-1,1]."
 
 # Default values
 drugs_default <- matrix(c(
     1e-9, 1e-9, # mutation rates
-    log(2) / 3.5, log(2) / 3.5, # drug elimination rates
+    rep(round(log(2) / 3.5, 3), 2), # drug elimination rates
     7, 7 # drug influx concentrations, MIC units
 ), nrow = 2, ncol = 3, dimnames = list(
     c("A1", "A2"),
@@ -45,9 +45,9 @@ drugs_default <- matrix(c(
 
 growth_default <- matrix(
     c(
-        1e12, 0, 0, 0, # init: initial populations
-        0.8 * c(1, 0.9, 0.9, 0.81), # mu: growth rates
-        1e14 * c(1, 1, 1, 1), # k: nutrients at half-maximal growth rate
+        "1e+12", 0, 0, 0, # init: initial populations
+        0.88 * c(1, 0.9, 0.9, 0.81), # mu: growth rates
+        c(1e14, 1e14, 1e14, 1e14), # k: nutrients at half-maximal growth rate
         1, 1, 1, 1 # alpha: resources used per unit growth
     ),
     nrow = 4, ncol = 4,
@@ -59,7 +59,6 @@ growth_default <- matrix(
 
 pd_default <- matrix(
     c(
-        0.3, 0.3, 0.3, 0.3, # psi
         0.6, 0.6, 0.6, 0.6, # phi1
         1, 28, 1, 28, # zeta1
         1, 1, 1, 1, # kappa1
@@ -68,10 +67,10 @@ pd_default <- matrix(
         1, 1, 1, 1, # kappa2
         0, 0, 0, 0 # theta
     ),
-    nrow = 4, ncol = 8,
+    nrow = 4, ncol = 7,
     dimnames = list(
         c("S", "R1", "R2", "R12"),
-        c("Psi", "Phi1", "Zeta1", "Kappa1", "Phi2", "Zeta2", "Kappa2", "Theta")
+        c("Phi1", "Zeta1", "Kappa1", "Phi2", "Zeta2", "Kappa2", "Theta")
     )
 )
 
@@ -94,22 +93,16 @@ ui <- fluidPage(
                             p(basic_text),
                             numericInput("rep", "Number of Runs", value = 1, min = 1, step = 1),
                             numericInput("time", "Simulation Time (hours)", value = 100, step = 1),
-                            selectInput("stewardship", "Antibiotic Stewardship Strategy",
-                                choices = c(
-                                    "Cycling" = "cycl",
-                                    "Combination" = "comb",
-                                    "Drug 1 Only" = "1_only",
-                                    "Drug 2 Only" = "2_only"
-                                )
-                            ),
                             checkboxInput("deterministic", "Deterministic Model", FALSE),
+                            numericInput("seed", "Random Seed", value = NULL),
+                            checkboxInput("cycl", "Cycle between drugs", TRUE),
+                            numericInput("dose_rep", "Number of doses before switching drugs",
+                              value = 1, min = 1, step = 1)
                             # sliderInput("dt", "log_10 of time between data points (hours)",
                             #     value = -1, min = -3, max = 0, step = 0.1
-                            # ),
-                            numericInput("HGT", "recombination rate",
-                                value = 0, min = 0, max = 1, step = 1e-4
+                            # )
                             )
-                        ))
+                        )
                     )
                 ),
                 tabPanel(
@@ -122,6 +115,9 @@ ui <- fluidPage(
                                 rows = list(extend = FALSE, names = TRUE),
                                 cols = list(extend = FALSE, names = TRUE),
                                 class = "numeric"
+                            ),
+                            numericInput("HGT", "recombination rate",
+                                value = 0, min = 0, max = 1, step = 1e-15
                             )
                         ))
                     )
@@ -194,7 +190,9 @@ server <- function(input, output, session) {
         simulate(
             rep = input$rep,
             deterministic = input$deterministic,
-            stewardship = input$stewardship,
+            seed = input$seed,
+            cycl = input$cycl,
+            dose_rep = input$dose_rep,
             time = input$time,
             freq = input$freq,
             # dt = 10^input$dt,
@@ -205,9 +203,8 @@ server <- function(input, output, session) {
             m2 = input$drugs["A2", "Mutation rate"],
             d1 = input$drugs["A1", "Elimination rate"],
             d2 = input$drugs["A2", "Elimination rate"],
-            influx = setNames(input$drugs[, "Influx"], c("A1", "A2")),
-            init = setNames(input$growth[, c("Init")], c("S", "R1", "R2", "R12")),
-            psi = input$pd[, "Psi"],
+            influx = input$drugs[, "Influx"],
+            init = input$growth[, c("Init")],
             phi1 = input$pd[, "Phi1"],
             zeta1 = input$pd[, "Zeta1"],
             kappa1 = input$pd[, "Kappa1"],

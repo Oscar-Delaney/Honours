@@ -122,6 +122,7 @@ single_run <- function(config, x) {
         times <- time_grid[time_grid <= freq]
         new <- ode(state, times, ode_rates, config)
       } else {
+        if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = freq,
           deterministic = grep("depletion", names(transitions))
@@ -155,6 +156,7 @@ single_run <- function(config, x) {
 # a function to simulate the model
 simulate <- function(
   rep = 1, # number of runs of the simulation
+  seed = NULL, # seed for reproducibility
   dose_rep = 1, # number of doses of the same drug before switching
   deterministic = FALSE, # should be either TRUE or FALSE
   cycl = TRUE, # should be either TRUE or FALSE
@@ -293,5 +295,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(dose_rep = 1, deterministic = F, time = 100, rep = 1), type = "mean"))
+# system.time(log_plot(simulate(dose_rep = 1, rep = 10), type = "all"))
 # simulate(deterministic = T)$value[7001:7007]
