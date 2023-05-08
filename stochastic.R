@@ -12,7 +12,11 @@ hill <- function(A, phi, zeta, kappa) {
 
 # interaction between the two drugs
 interaction <- function(A1_death, A2_death, phi1, phi2, theta) {
-  return(theta * A1_death * A2_death / sqrt(phi1 * phi2))
+  if (phi1 * phi2 > 0) {
+    return(theta * A1_death * A2_death / sqrt(phi1 * phi2))
+  } else {
+    return(0)
+  }
 }
 
 # total death rate from two antibiotics with interactions
@@ -172,7 +176,7 @@ simulate <- function(
   d2 = log(2) / 3.5, # rate of drug 2 elimination
   influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations, units of zeta_s
   init = c(S = 1e12, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
-  phi1 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 1 death rate
+  phi1 = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 1 death rate
   phi2 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 2 death rate
   zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # [drug 1] at half-max death rate
   zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # [drug 2] at half-max death rate
@@ -295,5 +299,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(dose_rep = 1, rep = 10), type = "all"))
+system.time(log_plot(simulate(dose_rep = 1, rep = 10), type = "all"))
 # simulate(deterministic = T)$value[7001:7007]
