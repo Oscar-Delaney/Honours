@@ -66,7 +66,7 @@ make_transitions <- function() {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- state[names(init)] * monod(N, mu, k)
+    replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k)
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
       S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
@@ -77,12 +77,12 @@ rates <- function(state, config, t) {
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate death rates
-    death_rates <- state[names(init)] * death(A1, phi1, zeta1, kappa1,
+    death_rates <- c(S, R1, R2, R12) * death(A1, phi1, zeta1, kappa1,
       A2, phi2, zeta2, kappa2, theta)
     # Calculate other rates
     HGT_MDR_loss <- HGT * R12 * S
     HGT_MDR_gain <- HGT * R1 * R2
-    N_depletion <- replication_rates %*% alpha
+    N_depletion <- sum(replication_rates * alpha)
     A1_depletion <- d1 * A1
     A2_depletion <- d2 * A2
     # Combine all rates and return
@@ -91,7 +91,7 @@ rates <- function(state, config, t) {
     return(setNames(rate_list, names(make_transitions())))
   })
 }
-rates(state,config,t)
+
 # a function to convert the transition rates into an ODE function
 ode_rates <- function(t, state, config) {
   with(as.list(rates(state, config, t)), {
@@ -124,7 +124,7 @@ single_run <- function(config, x) {
       } else {
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = freq,
-          deterministic = grep("deplet", names(transitions))
+          deterministic = grep("depletion", names(transitions))
         )
       }
       # Make the time column reflect the overall time accurately
@@ -133,10 +133,11 @@ single_run <- function(config, x) {
       solution <- if (t == 0) new else rbind(solution, new[-1, ])
       # Update the time
       t <- t + freq
-      # Run the bottleneck and update the state
+      # flip the pattern after the appropriate number of infusions of the drug
       if (cycl && (t / freq) %% dose_rep == 0) {
         config$pattern <- 1 - config$pattern
       }
+      # Run the bottleneck and update the state
       state <- bottleneck(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
@@ -153,8 +154,8 @@ single_run <- function(config, x) {
 
 # a function to simulate the model
 simulate <- function(
-  rep = 1,
-  dose_rep = 1,
+  rep = 1, # number of runs of the simulation
+  dose_rep = 1, # number of doses of the same drug before switching
   deterministic = FALSE, # should be either TRUE or FALSE
   cycl = TRUE, # should be either TRUE or FALSE
   time = 100, # time to simulate, in hours
@@ -168,22 +169,21 @@ simulate <- function(
   d1 = log(2) / 3.5, # rate of drug 1 elimination
   d2 = log(2) / 3.5, # rate of drug 2 elimination
   influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations, units of zeta_s
-  # lists of genotype-specific parameters, in the order S, R1, R2, R12
   init = c(S = 1e12, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
-  phi1 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum reduction in fitness for drug 1
-  phi2 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum reduction in fitness for drug 2
-  zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # drug 1 concentration at half-maximal death rate
-  zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # drug 2 concentration at half-maximal death rate
-  kappa1 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter drug 1
-  kappa2 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter drug 2
+  phi1 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 1 death rate
+  phi2 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 2 death rate
+  zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # [drug 1] at half-max death rate
+  zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # [drug 2] at half-max death rate
+  kappa1 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter
+  kappa2 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter
   theta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # drug interaction term
-  mu = 0.88 * c(S = 1, R1 = 0.9, R2 = 0.9, R12 = 0.81), # growth rate with infinite resources
-  k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # resource concentration at half-maximal growth
-  alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1) # resources used per unit growth
+  mu = 0.88 * c(S = 1, R1 = 0.9, R2 = 0.9, R12 = 0.81), # maximum growth rate
+  k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # [N] at half-max growth rate
+  alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1) # nutrients used per replication
   ) {
   # Define the parameters of the model
   config <- as.list(environment())
-  config$influx <- influx * c(zeta1["S"], zeta2["S"]) # normalise units
+  config$influx <- influx * c(zeta1["S"], zeta2["S"]) # normalise drug units
   config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
@@ -193,49 +193,38 @@ simulate <- function(
   return(pivot_longer(solutions, cols = -c(time, rep), names_to = "variable"))
 }
 
-# A function to summarise the output of the simulation
-summarise <- function(solutions) {
-  summary <- solutions %>%
-    group_by(time, variable) %>%
-    reframe(
-      mean = mean(value),
-      sd = sd(value),
-      se = sd / sqrt(n()),
-      ci_lower = max(0, mean - 1.96 * se),
-      ci_upper = mean + 1.96 * se,
-      IQR_bounds = list(quantile(value, c(0.25, 0.5, 0.75)))
-    ) %>%
-    # convert the list of quantiles to individual columns
-    mutate(
-      IQR_lower = map_dbl(IQR_bounds, 1),
-      median = map_dbl(IQR_bounds, 2),
-      IQR_upper = map_dbl(IQR_bounds, 3)
-    ) %>%
-    select(-IQR_bounds) # Remove the IQR_bounds column
-  return(summary)
-}
-
 log_plot <- function(solutions, type = "mean") {
   # Choose the type of central tendency and range to plot
-  if (type == "median") {
-    summary <- summarise(solutions)
-    summary$central <- summary$median
-    summary$lower <- summary$IQR_lower
-    summary$upper <- summary$IQR_upper
-    summary$rep <- 1
-  } else if (type == "mean") {
-    summary <- summarise(solutions)
-    summary$central <- summary$mean
-    summary$lower <- summary$ci_lower
-    summary$upper <- summary$ci_upper
-    summary$rep <- 1
+  if (type == "mean") {
+    summary <- solutions %>%
+      group_by(time, variable) %>%
+      reframe(
+        central = mean(value),
+        se = sd(value) / sqrt(n()),
+        lower = max(0, central - 1.96 * se),
+        upper = central + 1.96 * se,
+        rep = 1
+      )
+  } else if (type == "median") {
+    summary <- solutions %>%
+      group_by(time, variable) %>%
+      reframe(
+        IQR_bounds = list(quantile(value, c(0.25, 0.5, 0.75))),
+        rep = 1
+      ) %>%
+      # convert the list of quantiles to individual columns
+      mutate(
+        lower = map_dbl(IQR_bounds, 1),
+        central = map_dbl(IQR_bounds, 2),
+        upper = map_dbl(IQR_bounds, 3)
+      ) %>%
+      select(-IQR_bounds)
   } else if (type == "all") {
     summary <- solutions
-    summary$central <- summary$value
+    colnames(summary)[colnames(summary) == "value"] <- "central"
   } else {
-    stop("type must be either 'median' or 'mean'")
+    stop("type must be 'all', 'median' or 'mean'")
   }
-  # filtered <- filter(summary, variable %in% c("S", "R1", "R2", "R12"))
   filtered <- summary %>%
     filter(variable %in% c("S", "R1", "R2", "R12")) %>%
     mutate(variable = factor(variable, levels = c("S", "R1", "R2", "R12"))) %>%
@@ -294,7 +283,7 @@ log_plot <- function(solutions, type = "mean") {
       legend.text = element_text(size = 20)
     )
   # Add the confidence intervals
-  if (type %in% c("mean", "median")) {
+  if (type %in% c("mean", "median") && max(solutions$rep) > 1) {
     plot <- plot +
       geom_ribbon(data = filtered, alpha = 0.3,
         aes(x = time, ymin = lower, ymax = upper, fill = variable)) +
@@ -304,5 +293,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(dose_rep = 1, deterministic = T, time = 100, rep = 1), type = "all"))
-simulate(deterministic = T)$value[7001:7007]
+# system.time(log_plot(simulate(dose_rep = 1, deterministic = F, time = 100, rep = 1), type = "mean"))
+# simulate(deterministic = T)$value[7001:7007]
