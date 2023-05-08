@@ -6,14 +6,8 @@ library(future)
 library(future.apply)
 
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
-hill <- function(A, params) {
-  # code to extract the individual parameters
-  with(as.list(sapply(c("psi", "phi", "zeta", "kappa"), function(x) {
-    x <- unname(params[grep(x, names(params))])
-  })), {
-    # compute the actual hill function
-    return(phi * (A / zeta)^kappa / ((A / zeta)^kappa - (psi - phi) / psi))
-  })
+hill <- function(A, phi, zeta, kappa) {
+  return(phi / (1 + (A / zeta)^(-kappa)))
 }
 
 # interaction between the two drugs
@@ -22,11 +16,10 @@ interaction <- function(A1_death, A2_death, phi1, phi2, theta) {
 }
 
 # total death rate from two antibiotics with interactions
-death <- function(A1, A2, params) {
-  death1 <- hill(A1, params[c("psi", "phi1", "zeta1", "kappa1")])
-  death2 <- hill(A2, params[c("psi", "phi2", "zeta2", "kappa2")])
-  interaction <- interaction(death1, death2,
-    params["phi1"], params["phi2"], params["theta"])
+death <- function(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta) {
+  death1 <- hill(A1, phi1, zeta1, kappa1)
+  death2 <- hill(A2, phi2, zeta2, kappa2)
+  interaction <- interaction(death1, death2, phi1, phi2, theta)
   return(death1 + death2 + interaction)
 }
 
@@ -88,8 +81,9 @@ rates <- function(state, config, t) {
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate death rates
-    death_rates <- sapply(rownames(params), function(var) {
-      get(var) * death(A1 = A1, A2 = A2, params[var, ])
+    death_rates <- sapply(rownames(params), function(x) {
+      return(get(x) * death(A1, phi1[x], zeta1[x], kappa1[x],
+        A2, phi2[x], zeta2[x], kappa2[x], theta[x]))
     })
     # Calculate other rates
     HGT_MDR_loss <- HGT * R12 * S
@@ -103,10 +97,10 @@ rates <- function(state, config, t) {
     return(setNames(rate_list, names(make_transitions())))
   })
 }
-
+rates(state,config,t)
 # a function to convert the transition rates into an ODE function
 ode_rates <- function(t, state, config) {
-  with(as.list(rates(state, config, t)),{
+  with(as.list(rates(state, config, t)), {
     return(list(c(
       S = S_growth - S_death + HGT_MDR_gain - HGT_MDR_loss,
       R1 = R1_growth - R1_death - HGT_MDR_gain + HGT_MDR_loss,
@@ -179,20 +173,19 @@ simulate <- function(
   m2 = 1e-9, # rate of mutations conferring resistance to drug 2
   d1 = log(2) / 3.5, # rate of drug 1 elimination
   d2 = log(2) / 3.5, # rate of drug 2 elimination
-  influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations
+  influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations, units of zeta_s
   # lists of genotype-specific parameters, in the order S, R1, R2, R12
   init = c(S = 1e12, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
-  psi = 0.3 * c(1, 1, 1, 1), # growth rate with no drugs
-  phi1 = 2 * psi, # maximum reduction in fitness for drug 1
-  phi2 = 2 * psi, # maximum reduction in fitness for drug 2
-  zeta1 = c(1, 28, 1, 28), # MIC drug 1, units scales so zeta1_S = 1
-  zeta2 = c(1, 1, 28, 28), # MIC drug 2, units scales so zeta2_S = 1
-  kappa1 = c(1, 1, 1, 1), # Hill function steepness parameter drug 1
-  kappa2 = c(1, 1, 1, 1), # Hill function steepness parameter drug 2
-  theta = c(0, 0, 0, 0), # drug interaction term
-  mu = 0.88 * c(1, 0.9, 0.9, 0.81), # growth rate with infinite resources
-  k = 1e14 * c(1, 1, 1, 1), # resource concentration at half-maximal growth
-  alpha = c(1, 1, 1, 1) # resources used per unit growth
+  phi1 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum reduction in fitness for drug 1
+  phi2 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum reduction in fitness for drug 2
+  zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # drug 1 concentration at half-maximal death rate
+  zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # drug 2 concentration at half-maximal death rate
+  kappa1 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter drug 1
+  kappa2 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter drug 2
+  theta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # drug interaction term
+  mu = 0.88 * c(S = 1, R1 = 0.9, R2 = 0.9, R12 = 0.81), # growth rate with infinite resources
+  k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # resource concentration at half-maximal growth
+  alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1) # resources used per unit growth
   ) {
   # Define the parameters of the model
   config <- as.list(environment())
@@ -319,4 +312,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(dose_rep = 7, deterministic = F, time = 100, rep = 1), type = "all"))
+system.time(log_plot(simulate(dose_rep = 1, deterministic = T, time = 100, rep = 1), type = "all"))
+simulate(deterministic = T)$value[7001:7007]
