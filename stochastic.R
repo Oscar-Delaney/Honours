@@ -136,7 +136,7 @@ single_run <- function(config, x) {
       # Update the time
       t <- t + freq
       # flip the pattern after the appropriate number of infusions of the drug
-      if (cycl && (t / freq) %% dose_rep == 0) {
+      if (cycl && round((t / freq),0) %% dose_rep == 0) {
         config$pattern <- 1 - config$pattern
       }
       # Run the bottleneck and update the state
@@ -296,5 +296,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(), type = "all"))
+system.time(log_plot(simulate(freq = 10.3), type = "all"))
 # simulate(deterministic = T)$value[7001:7007]
