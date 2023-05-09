@@ -37,3 +37,49 @@ error = function(e) {
   print(length(solution$time))
   duplicated_time_values <- solution$time[duplicated(solution$time)]
   print(duplicated_time_values)
+
+
+# adaptivetau investigation
+
+transitions <- list(
+    s = c(y1 = +1),
+    d = c(y2 = +1),
+    u = c(y3 = +1)
+)
+
+rates <- function(state,parms,t) {
+    return(c(
+        s = state["y1"],
+        d = state["y2"],
+        u = 0
+        )
+    )
+}
+
+state <- c(y1 = 1e0, y2 = 1e0, y3=0)
+parms <- 0
+sol <- as.data.frame(ssa.adaptivetau(state, transitions, rates,
+    parms, tf = 10, deterministic = c(F,T,F)))
+# sol$y3 <- exp(sol$time)
+ggplot(sol, aes(x = time)) +
+    geom_step(aes(y = y1, color = "y1")) +
+    geom_step(aes(y = y2, color = "y2")) +
+    # geom_step(aes(y = y3, color = "y3")) +
+    scale_color_manual(name = "Species", values = c("y1" = "blue", "y2" = "red")) +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+      breaks = 10^seq(0, 20),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    theme_minimal() +
+    labs(title = "Adaptive tau method",
+        x = "Time",
+        y = "Population size") +
+    theme(
+        legend.position = "bottom",
+        plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20)
+    )
+# plot(sol$time,sol$y1)
+sol
