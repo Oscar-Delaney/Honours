@@ -160,3 +160,18 @@ write.csv(summary, file = "results/summary_stats2.csv", row.names = FALSE)
 
 sol = data[[3]] 
 sol[sol$variable =="N",]
+
+
+# Critique of Wahl papers
+freq <- 20
+s <- 0
+log_plot(simulate(rep = 100, time =20, deterministic = F, freq = freq, D = exp(-freq),
+  N0 = 1, m1 = 0, m2 = 0, k = 0, alpha = 0, influx = c(A1 = 0, A2 = 0),
+  mu = c(S=1,R1=1+s,R2=1,R12=1), init = c(S=1e22,R1=0,R2=0,R12=0)),
+type = "all")
+# det = data.frame(time = 0:20, value = 1e2*exp(-freq*0:20))
+sol <- simulate(rep = 100, time =20, deterministic = F, freq = freq, D = exp(-freq),
+  N0 = 1, m1 = 0, m2 = 0, k = 0, alpha = 0, influx = c(A1 = 0, A2 = 0),
+  mu = c(S=1,R1=1+s,R2=1,R12=1), init = c(S=1e20,R1=0,R2=0,R12=0))
+mean(sol[sol$variable=="S"&sol$time==20,]$value)
+# deterministic is 968375334
