@@ -236,7 +236,7 @@ log_plot <- function(solutions, type = "mean") {
   colors <- c("black", "navy", "#800000", "#008000")
   # Create antibiotic concentrations data frame
   background_df <- solutions %>%
-    filter(rep == 1 & variable %in% c("A1", "A2")) %>%
+    filter(rep == min(rep) & variable %in% c("A1", "A2")) %>%
     group_by(variable) %>%
     mutate(value = value / max(value)) %>%
     ungroup() %>%
@@ -296,5 +296,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(dose_rep = 1, rep = 1), type = "all"))
+system.time(log_plot(simulate(), type = "all"))
 # simulate(deterministic = T)$value[7001:7007]
