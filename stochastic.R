@@ -33,11 +33,11 @@ monod <- function(N, mu, k) {
 bottleneck <- function(state, config) {
   with(config, {
     pops <- state[names(init)] # extract just the cell counts
-    if (deterministic) {
+   if (deterministic) {
       diluted <- pops * D
     } else {
       diluted <- setNames(rbinom(length(pops), pops, D), names(pops))
-    }
+      }
     new_state <- c(diluted, state["N"] * D + N0 * (1 - D),
     state[c("A1", "A2")] * D + influx * pattern * (1 - D))
     return(new_state)
@@ -136,7 +136,7 @@ single_run <- function(config, x) {
       # Update the time
       t <- t + freq
       # flip the pattern after the appropriate number of infusions of the drug
-      if (cycl && round((t / freq),0) %% dose_rep == 0) {
+      if (cycl && round((t / freq), 0) %% dose_rep == 0) {
         config$pattern <- 1 - config$pattern
       }
       # Run the bottleneck and update the state
@@ -193,7 +193,9 @@ simulate <- function(
   solutions <- bind_rows(future_lapply(1:rep, function(x) {
     single_run(config, x)},
     future.seed = TRUE))
-  return(pivot_longer(solutions, cols = -c(time, rep), names_to = "variable"))
+  # Convert the solutions to long format
+  long <- pivot_longer(solutions, cols = -c(time, rep), names_to = "variable")
+  return(list(long, config))
 }
 
 log_plot <- function(solutions, type = "mean") {
@@ -261,8 +263,8 @@ log_plot <- function(solutions, type = "mean") {
       limits = c(0, 1), name = "A2", labels = NULL) +
     # Add the lines
     new_scale_fill() +
-    geom_line(data = filtered, aes(x = time, y = central, color = variable, linetype = factor(rep)),
-      linewidth = 1 + 0.5 / max(filtered$rep)) +
+    geom_line(data = filtered, aes(x = time, y = central, color = variable,
+      linetype = factor(rep)), linewidth = 1 + 0.5 / max(filtered$rep)) +
     scale_color_manual(values = colors) +
     scale_linetype_manual(values = rep("solid", max(filtered$rep))) +
     guides(linetype = "none") +
@@ -296,5 +298,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(freq = 10.3), type = "all"))
+system.time(log_plot(simulate(rep = 1, deterministic = F)[1], type = "all"))
 # simulate(deterministic = T)$value[7001:7007]
