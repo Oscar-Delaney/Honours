@@ -43,7 +43,7 @@ event <- function(state, config) {
       } else {
         pops <- setNames(rbinom(length(pops), pops, D), names(pops))
         }
-      N <- N * D + N0 * (1-D)
+      N <- N * D + N0 * (1 - D)
       drugs <- drugs * D
     }
     if (t %% dose_gap == 0) {
@@ -151,7 +151,7 @@ single_run <- function(config, x) {
         config$pattern <- 1 - config$pattern
       }
       # Run the bottleneck and/or dose and update the state
-      state <- event(new[nrow(new), ], config)
+      state <- bottleneck(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
     approx_vars <- lapply(colnames(solution), function(var) {
@@ -311,5 +311,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(cycl = T,dose_gap = 10,drug_replace=F,deterministic = T)[[1]], type = "all"))
-# simulate(deterministic = T)$value[7001:7007]
+# system.time(log_plot(simulate(cycl = T,dose_gap = 10,drug_replace=F,deterministic = T)[[1]], type = "all"))
+simulate(deterministic = T)[[1]]$value[7001:7007]
