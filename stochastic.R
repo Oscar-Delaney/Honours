@@ -30,17 +30,26 @@ monod <- function(N, mu, k) {
 }
 
 # a function that reduces all populations by a factor of D, in expectation
-bottleneck <- function(state, config) {
+event <- function(state, config) {
+  print(state)
   with(config, {
+    t <- state["time"] # extract the time
     pops <- state[names(init)] # extract just the cell counts
-   if (deterministic) {
-      diluted <- pops * D
-    } else {
-      diluted <- setNames(rbinom(length(pops), pops, D), names(pops))
-      }
-    new_state <- c(diluted, state["N"] * D + N0 * (1 - D),
-    state[c("A1", "A2")] * D + influx * pattern * (1 - D))
-    return(new_state)
+    N <- state["N"] # extract the nutrient concentration
+    drugs <- state[c("A1", "A2")] # extract the drug concentrations
+    if (t %% tau == 0) {
+      if (deterministic) {
+        pops <- pops * D
+      } else {
+        pops <- setNames(rbinom(length(pops), pops, D), names(pops))
+        }
+      N <- N * D + N0 * (1-D)
+      drugs <- drugs * D
+    }
+    if (t %% dose_gap == 0) {
+      drugs <- drugs * drug_replace + influx * pattern
+    }
+    return(c(pops, N, drugs))
   })
 }
 
@@ -118,14 +127,16 @@ single_run <- function(config, x) {
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     t <- 0
     while (t < time) {
-      # Run the model between bottlenecks, deterministically or stochastically
+      # Determine the time until the next bottleneck or dose
+      end <- min(tau - t %% tau, dose_gap - t %% dose_gap)
+      # Run the model between events, deterministically or stochastically
       if (deterministic) {
-        times <- time_grid[time_grid <= freq]
+        times <- time_grid[time_grid <= end]
         new <- ode(state, times, ode_rates, config)
       } else {
         if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
         new <- ssa.adaptivetau(
-          state, transitions, rates, config, tf = freq,
+          state, transitions, rates, config, tf = end,
           deterministic = grep("depletion", names(transitions))
         )
       }
@@ -134,13 +145,13 @@ single_run <- function(config, x) {
       # Update the solution
       solution <- if (t == 0) new else rbind(solution, new[-1, ])
       # Update the time
-      t <- t + freq
+      t <- t + end
       # flip the pattern after the appropriate number of infusions of the drug
-      if (cycl && round((t / freq), 0) %% dose_rep == 0) {
+      if (cycl && round((t / dose_gap), 5) %% dose_rep == 0) {
         config$pattern <- 1 - config$pattern
       }
-      # Run the bottleneck and update the state
-      state <- bottleneck(new[nrow(new), ], config)
+      # Run the bottleneck and/or dose and update the state
+      state <- event(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
     approx_vars <- lapply(colnames(solution), function(var) {
@@ -158,12 +169,14 @@ single_run <- function(config, x) {
 simulate <- function(
   rep = 1, # number of runs of the simulation
   seed = NULL, # seed for reproducibility
-  dose_rep = 1, # number of doses of the same drug before switching
   deterministic = FALSE, # should be either TRUE or FALSE
   cycl = TRUE, # should be either TRUE or FALSE
+  drug_replace = TRUE, # should be either TRUE or FALSE
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
-  freq = 10, # frequency of bottlenecks, in hours
+  tau = 10, # frequency of bottlenecks, in hours
+  dose_rep = 1, # number of doses of the same drug before switching
+  dose_gap = 10, # time between doses of the same drug, in hours
   D = 0.1, # dilution ratio at bottlenecks
   N0 = 1e15, # initial nutrient concentration
   HGT = 0, # rate of horizontal gene transfer
@@ -298,5 +311,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(rep = 1, deterministic = F)[1], type = "all"))
+system.time(log_plot(simulate(cycl = T,dose_gap = 10,drug_replace=F,deterministic = T)[[1]], type = "all"))
 # simulate(deterministic = T)$value[7001:7007]
