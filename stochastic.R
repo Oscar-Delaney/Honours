@@ -31,7 +31,6 @@ monod <- function(N, mu, k) {
 
 # a function that reduces all populations by a factor of D, in expectation
 event <- function(state, config) {
-  print(state)
   with(config, {
     t <- state["time"] # extract the time
     pops <- state[names(init)] # extract just the cell counts
@@ -151,7 +150,7 @@ single_run <- function(config, x) {
         config$pattern <- 1 - config$pattern
       }
       # Run the bottleneck and/or dose and update the state
-      state <- bottleneck(new[nrow(new), ], config)
+      state <- event(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
     approx_vars <- lapply(colnames(solution), function(var) {
@@ -311,5 +310,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(cycl = T,dose_gap = 10,drug_replace=F,deterministic = T)[[1]], type = "all"))
+system.time(log_plot(simulate(tau=1e3)[[1]], type = "all"))
 simulate(deterministic = T)[[1]]$value[7001:7007]
