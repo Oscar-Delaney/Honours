@@ -46,7 +46,7 @@ event <- function(state, config) {
       drugs <- drugs * D
     }
     if (t %% dose_gap == 0) {
-      drugs <- drugs * drug_replace + influx * pattern
+      drugs <- drugs * keep_old_drugs + influx * pattern
     }
     return(c(pops, N, drugs))
   })
@@ -170,7 +170,7 @@ simulate <- function(
   seed = NULL, # seed for reproducibility
   deterministic = FALSE, # should be either TRUE or FALSE
   cycl = TRUE, # should be either TRUE or FALSE
-  drug_replace = TRUE, # should be either TRUE or FALSE
+  keep_old_drugs = TRUE, # should be either TRUE or FALSE
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
   tau = 10, # frequency of bottlenecks, in hours
@@ -310,5 +310,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(tau=1e3)[[1]], type = "all"))
-simulate(deterministic = T)[[1]]$value[7001:7007]
+system.time(log_plot(simulate(tau = 1e3)[[1]], type = "all"))
+simulate(deterministic = TRUE)[[1]]$value[7001:7007]
