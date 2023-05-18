@@ -83,3 +83,136 @@ ggplot(sol, aes(x = time)) +
     )
 # plot(sol$time,sol$y1)
 sol
+
+
+# Reconstruct Torella et al. 2010
+metrics2 <- function(sols) {
+    # Find the first time step when total population is below 1
+    # noting that sols is in long dataframe format
+    t_clear_S <- min(sols$time[sols$variable == "S" & sols$value < 1])
+    t_clear_R1 <- min(sols$time[sols$variable == "R1" & sols$value < 1])
+    t_clear_R2 <- min(sols$time[sols$variable == "R2" & sols$value < 1])
+    t_clear <- max(t_clear_S, t_clear_R1, t_clear_R2)
+    # Calculate the double-resistant population size at t_clear
+    R12 <- mean(sols$value[sols$time == t_clear & sols$variable == "R12"])
+    return(list(R12 = R12, t_clear = t_clear))
+}
+
+metrics_plot2 <- function(summary, metric, title, ylab) {
+    ggplot(summary, aes(x = theta, y = 1/get(metric))) +
+        geom_point(aes(color = factor(N0))) +
+        geom_line(aes(color = factor(N0))) +
+        theme_minimal() +
+        labs(
+            title = title,
+            x = "Drug interaction parameter (theta)",
+            y = ylab
+        ) +
+        # scale_y_log10() +
+        scale_color_discrete(name = "N0") +
+        theme(
+            legend.position = "bottom",
+            plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+            axis.title = element_text(size = 25, face = "bold"),
+            axis.text = element_text(size = 25),
+            legend.title = element_text(size = 20),
+            legend.text = element_text(size = 20)
+        )
+}
+
+
+m_rate <- 1e-6
+theta = seq(-2, 2, by = 0.1)
+N0 = 10 ^ seq(8, 10, by = 1)
+summary <- expand.grid(theta = theta, N0 = N0)
+summary$R12 <- 0
+summary$t_clear <- 0
+
+# Run the simulations
+data <- list()
+for (i in seq_len(nrow(summary))) {
+    data[[i]] <- sols <- simulate(
+        rep = 1,
+        deterministic = TRUE,
+        stewardship = "comb",
+        time = 50,
+        freq = 1000,
+        D = 1,
+        N0 = summary$N0[i],
+        HGT = 0,
+        m1 = m_rate,
+        m2 = m_rate,
+        d1 = 0,
+        d2 = 0,
+        influx = 7 * c(A1 = 1, A2 = 1),
+        init = 3.6e10 * c(S = 1 - 2 * m_rate, R1 = m_rate, R2 = m_rate, R12 = 0),
+        psi = 0.94 * c(1, 1, 1, 1),
+        zeta1 = c(1, 1e9, 1, 1e9),
+        zeta2 = c(1, 1, 1e9, 1e9),
+        theta = summary$theta[i] * c(1, 1, 1, 1),
+        mu = 0.117 * c(1, 1, 1, 1),
+        k = 1e9 * c(1, 1, 1, 1),
+    )
+}
+
+# Calculate the summary statistics
+for (i in seq_len(nrow(summary))) {
+    metric_results <- metrics2(data[[i]])
+    summary$R12[i] <- metric_results$R12
+    summary$t_clear[i] <- metric_results$t_clear
+}
+
+data_to_plot <- summary[summary$N0 == 1e8,]
+metrics_plot2(data_to_plot, "R12", "Public Health Efficacy", "1 / Double-resistant population size")
+metrics_plot2(data_to_plot, "t_clear", "Clinical Efficacy", "1 / Time to clearance (days)")
+# Save the simulation results to a file
+save(data, file = "results/data2.RData")
+# Save summary statistics to a CSV file
+write.csv(summary, file = "results/summary_stats2.csv", row.names = FALSE)
+
+sol = data[[3]] 
+sol[sol$variable =="N",]
+
+
+# Critique of Wahl papers
+source("stochastic.R")
+log_plot(data[[10]][[1]][data[[1]][[1]]$rep > 99, ], type = "all")
+s <- 0.1
+summary <- data.frame(freq = seq(0.1, 3, by = 0.1))
+summary$D <- exp(-summary$freq)
+summary$wins <- 0
+data <- list()
+for (i in seq_len(nrow(summary))) {
+    freq <- summary$freq[i]
+    D <- exp(-freq)
+    sols <- simulate(rep = 100, freq = freq, D = D, N0 = 1e8, 
+        m2 = 0, k = 1e7, alpha = 1, influx = c(A1 = 0, A2 = 0),
+        mu = c(S=1.2,R1=1.2+s), init = c(S=round(1e8*D),R1=0,R2=0,R12=0))
+    data[[i]] <- sols
+}
+
+# calculate summary statistics
+for (i in seq_len(nrow(summary))) {
+    # count the number of runs on which R1 was at least 1e-5 of S at the end
+    end <- data[[i]][[1]][data[[i]][[1]]$time == 100,]
+    R1 <- end[end$variable == "R1",]$value
+    S <- end[end$variable == "S",]$value
+    summary$wins[i] <- mean(ifelse(S==0, R1, R1 / S) > 1e-7)
+}
+
+
+# use ggplot to scatterplot D on the x axis and wins on the y axis
+ggplot(summary, aes(x = D, y = wins)) +
+    geom_point() +
+    theme_light() +
+    labs(
+        title = "Optimal Dilution Ratio (resource constrained)",
+        x = "D",
+        y = "Probability that a mutant fixes"
+    ) +
+    theme(
+        plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25)
+    )
+summary
