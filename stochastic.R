@@ -253,6 +253,7 @@ log_plot <- function(solutions, type = "mean") {
     filter(rep == min(rep) & variable %in% c("A1", "A2")) %>%
     group_by(variable) %>%
     mutate(value = value / max(value)) %>%
+    mutate(across(value, ~replace_na(.x, 0))) %>%
     ungroup() %>%
     pivot_wider(names_from = variable, values_from = value) %>%
     mutate(xmin = lag(time), xmax = time) %>%
@@ -310,5 +311,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(tau = 1e3)[[1]], type = "all"))
-simulate(deterministic = TRUE)[[1]]$value[7001:7007]
+system.time(log_plot(simulate(time = 200, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
+# simulate(deterministic = TRUE)[[1]]$value[7001:7007]
