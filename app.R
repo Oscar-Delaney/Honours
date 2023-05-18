@@ -97,6 +97,8 @@ basic_content <- wellPanel(
 drugs_content <- wellPanel(
     p(drugs_text),
     matrixInput("drugs", value = drugs_default, class = "numeric"),
+    numericInput("bactericidal", "Drug mode (bactericidal = 1 to
+     bacteriostatic = 0)", value = 1, min = 0, max = 1, step = 1),
     numericInput("HGT", "recombination rate", value = 0, min = 0, step = 1e-15)
 )
 
@@ -166,6 +168,7 @@ server <- function(input, output, session) {
             dose_rep = input$dose_rep,
             dose_gap = input$dose_gap,
             keep_old_drugs = input$keep_old_drugs,
+            bactericidal = input$bactericidal,
             time = input$time,
             tau = input$tau,
             dt = input$dt,

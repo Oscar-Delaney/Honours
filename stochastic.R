@@ -74,8 +74,11 @@ make_transitions <- function() {
 # compute the rate at which each transition occurs
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
+    # Calculate death rates per cell
+    deaths <- death(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta)
     # Calculate replication rates
-    replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k)
+    replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) *
+      (1 - (1 - bactericidal) * deaths/(phi1 + phi2))
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
       S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
@@ -86,8 +89,7 @@ rates <- function(state, config, t) {
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate death rates
-    death_rates <- c(S, R1, R2, R12) * death(A1, phi1, zeta1, kappa1,
-      A2, phi2, zeta2, kappa2, theta)
+    death_rates <- c(S, R1, R2, R12) * deaths * bactericidal
     # Calculate other rates
     HGT_MDR_loss <- HGT * R12 * S
     HGT_MDR_gain <- HGT * R1 * R2
@@ -171,6 +173,7 @@ simulate <- function(
   deterministic = FALSE, # should be either TRUE or FALSE
   cycl = TRUE, # should be either TRUE or FALSE
   keep_old_drugs = TRUE, # should be either TRUE or FALSE
+  bactericidal = TRUE, # whether drugs directly kill or limit growth
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
   tau = 10, # frequency of bottlenecks, in hours
@@ -311,5 +314,5 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(time = 200, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
+system.time(log_plot(simulate(time = 200,bactericidal = 0, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
