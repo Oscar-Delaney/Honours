@@ -143,8 +143,10 @@ single_run <- function(config, x) {
       }
       # Make the time column reflect the overall time accurately
       new[, "time"] <- new[, "time"] + t
+      # Avoid duplicate times by adding a small increment after the bottleneck
+      new[1, "time"] <- new[1, "time"] * (1 + 1e-6)
       # Update the solution
-      solution <- if (t == 0) new else rbind(solution, new[-1, ])
+      solution <- if (t == 0) new else rbind(solution, new)
       # Update the time
       t <- t + end
       # flip the pattern after the appropriate number of infusions of the drug
