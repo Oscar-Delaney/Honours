@@ -1,88 +1,75 @@
+library(tidyverse)
+
 # Setting Parameters
-population_size <- 1e5 # Number of individuals in the population
-mutation_rate <- -2 # Since we are storing it in log10 format
-fitness_score <- 0 # Represented by the net number of beneficial mutations
+population_size <- 1e2 # Number of individuals in the population
+init_mutation_rate <- -2 # Since we are storing it in log10 format
+init_fitness <- 1 # Represented by the net number of beneficial mutations
 alpha <- 0.02 # Proportion of mutations that affect mutation rate
-proportion_increase <- 0.5 # Proportion of mutations that increase mutation rate
+p_increase <- 0.5 # Proportion of mutations that increase mutation rate
 mutation_jump_size <- 0.1 # Size of mutation rate change, increase or decrease
-proportion_beneficial <- 0.1 # Proportion of mutations that increase fitness
+p_beneficial <- 0.1 # Proportion of mutations that increase fitness
 generations <- 50 # Number of generations to simulate
 s <- 0.1 # Parameter for fitness advantage/disadvantage
 
-# Initialize population
-initialize_population <- function(population_size, mutation_rate, fitness_score) {
-  population <- data.frame(
-    mutation_rate = rep(mutation_rate, population_size),
-    fitness_score = rep(fitness_score, population_size)
-  )
+# Reproduction function
+reproduce <- function(population) {
+  population$individuals <- rpois(nrow(population), lambda = population$individuals * population$fitness)
   return(population)
 }
 
-# Reproduction function
-reproduce <- function(population, s) {
-  population$offspring_count <- rpois(nrow(population), lambda = (1 + s)^population$fitness_score)
-  offspring <- population[rep(seq_len(nrow(population)), population$offspring_count), ]
-  rownames(offspring) <- NULL  # Reset row names
-  return(offspring)
-}
-
-
 # Mutation function
-mutate <- function(offspring, mutation_rate, alpha, proportion_increase, mutation_jump_size, proportion_beneficial) {
+mutate <- function(offspring, alpha, p_increase, mutation_jump_size, p_beneficial) {
+  # Calculate the number of mutants in each class
+  offspring$mutants <- rbinom(nrow(offspring), offspring$individuals, 10^offspring$mutation_rate)
+  offspring$non_mutants <- offspring$individuals - offspring$mutants
+  # Calculate probabilities of each type of mutation
+  p_vec <- c(alpha * c(p_increase, 1 - p_increase), (1 - alpha) * c(p_beneficial, 1 - p_beneficial))
+  # Initialise the next generation with the non-mutants
+  next_gen <- offspring %>%
+    select(-c(individuals, mutants)) %>%
+    rename(individuals = non_mutants)
+  # Add rows for each mutant
   for (i in seq_len(nrow(offspring))) {
-    n_mutations <- rpois(1, lambda = 10^offspring$mutation_rate[i])
-    for (j in seq_len(n_mutations)) {
-      if (runif(1) < alpha) {
-        # Mutation affects mutation rate
-        if (runif(1) < proportion_increase) {
-          # Increase mutation rate
-          offspring$mutation_rate[i] <- offspring$mutation_rate[i] + mutation_jump_size
-        } else {
-          # Decrease mutation rate
-          offspring$mutation_rate[i] <- offspring$mutation_rate[i] - mutation_jump_size
-        }
-      } else {
-        # Mutation affects fitness
-        if (runif(1) < proportion_beneficial) {
-          # Increase fitness
-          offspring$fitness_score[i] <- offspring$fitness_score[i] + 1
-        } else {
-          # Decrease fitness
-          offspring$fitness_score[i] <- offspring$fitness_score[i] - 1
-        }
-      }
-    }
+    mutate_into <- table(sample(c("a","b","c","d"), size = offspring$mutants[i], prob = p_vec))
+    next_gen <- rbind(next_gen, data.frame(mutation_rate = offspring$mutation_rate[i] + mutation_jump_size * c(1, -1, 0, 0), fitness = offspring$fitness[i] + c(0, 0, 1, -1), individuals = mutate_into))
   }
-  return(offspring)
+  # Merge classes with same mutation_rate and fitness
+  next_gen <- next_gen %>%
+    group_by(mutation_rate, fitness) %>%
+    summarize(individuals = sum(individuals), .groups = "drop")
+  return(next_gen)
 }
 
 # Selection function
-selection <- function(mutated_offspring, population_size) {
+selection <- function(next_gen, population_size) {
   # Keep population size constant
-  if (nrow(mutated_offspring) > population_size) {
-    selected <- mutated_offspring[sample(1:nrow(mutated_offspring), population_size), ]
-  } else {
-    selected <- mutated_offspring
-  }
-  return(selected)
+  current_pop <- sum(next_gen$individuals)
+  next_gen$individuals <- rbinom(length(next_gen), next_gen$individuals, min(1,population_size / current_pop))
+  # Remove classes with zero individuals
+  next_gen <- next_gen %>%
+    filter(individuals > 0)
+  return(next_gen)
 }
 
 # Initialize population
-population <- initialize_population(population_size, mutation_rate, fitness_score)
-
+population <- data.frame(
+  mutation_rate = init_mutation_rate,   # log10 of initial mutation rate
+  fitness = init_fitness,    # initial fitness
+  individuals = population_size    # initial population size
+)
 # Initialize data frame for statistics
-stats <- data.frame(generation = integer(), avg_mutation_rate = numeric(), avg_fitness_score = numeric())
+stats <- data.frame(generation = integer(), avg_mutation_rate = numeric(), avg_fitness = numeric())
 
 # Simulation loop
 system.time(for (i in 1:generations) {
   # Step 1: Reproduction
-  offspring <- reproduce(population, s)
+  offspring <- reproduce(population)
 
   # Step 2: Mutation
-  mutated_offspring <- mutate(offspring, mutation_rate, alpha, proportion_increase, mutation_jump_size, proportion_beneficial)
+  next_gen <- mutate(offspring, alpha, p_increase, mutation_jump_size, p_beneficial)
 
   # Step 3: Selection
-  population <- selection(mutated_offspring, population_size)
+  population <- selection(next_gen, population_size)
 
   # Save statistics for this generation
   stats <- rbind(stats, data.frame(generation = i, avg_mutation_rate = 10^(mean(population$mutation_rate)), avg_fitness_score = (1 + s)^mean(population$fitness_score)))
