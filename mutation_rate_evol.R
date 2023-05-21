@@ -1,87 +1,104 @@
 library(tidyverse)
 
-# Setting Parameters
-population_size <- 1e2 # Number of individuals in the population
-init_mutation_rate <- -2 # Since we are storing it in log10 format
-init_fitness <- 1 # Represented by the net number of beneficial mutations
-alpha <- 0.02 # Proportion of mutations that affect mutation rate
-p_increase <- 0.5 # Proportion of mutations that increase mutation rate
-mutation_jump_size <- 0.1 # Size of mutation rate change, increase or decrease
-p_beneficial <- 0.1 # Proportion of mutations that increase fitness
-generations <- 50 # Number of generations to simulate
-s <- 0.1 # Parameter for fitness advantage/disadvantage
-
 # Reproduction function
-reproduce <- function(population) {
-  population$individuals <- rpois(nrow(population), lambda = population$individuals * population$fitness)
-  return(population)
+reproduce <- function(pop, s) {
+  pop$n <- rpois(nrow(pop), lambda = pop$n * (1 + s) ^ pop$w)
+  return(pop)
 }
 
 # Mutation function
-mutate <- function(offspring, alpha, p_increase, mutation_jump_size, p_beneficial) {
+do_mutations <- function(offspring, a, p_mu_up, jump, p_w_up, s) {
   # Calculate the number of mutants in each class
-  offspring$mutants <- rbinom(nrow(offspring), offspring$individuals, 10^offspring$mutation_rate)
-  offspring$non_mutants <- offspring$individuals - offspring$mutants
+  offspring <- offspring %>%
+    mutate(mutants = rbinom(n(), n, 10^mu))
   # Calculate probabilities of each type of mutation
-  p_vec <- c(alpha * c(p_increase, 1 - p_increase), (1 - alpha) * c(p_beneficial, 1 - p_beneficial))
-  # Initialise the next generation with the non-mutants
-  next_gen <- offspring %>%
-    select(-c(individuals, mutants)) %>%
-    rename(individuals = non_mutants)
+  p_vec <- c(a * c(p_mu_up, 1 - p_mu_up), (1 - a) * c(p_w_up, 1 - p_w_up))
+  # Create a list to hold data frames
+  next_gen_list <- vector("list", nrow(offspring))
   # Add rows for each mutant
   for (i in seq_len(nrow(offspring))) {
-    mutate_into <- table(sample(c("a","b","c","d"), size = offspring$mutants[i], prob = p_vec))
-    next_gen <- rbind(next_gen, data.frame(mutation_rate = offspring$mutation_rate[i] + mutation_jump_size * c(1, -1, 0, 0), fitness = offspring$fitness[i] + c(0, 0, 1, -1), individuals = mutate_into))
+    # Generate counts for each mutation type
+    mutate_into <- data.frame(n = tabulate(
+      sample(4, size = offspring$mutants[i], replace = TRUE, prob = p_vec),
+      nbins = 4))
+    # Create a data frame for this class and add to the list
+    next_gen_list[[i]] <- data.frame(
+      mu = offspring$mu[i] + jump * c(1, -1, 0, 0),
+      w = offspring$w[i] + c(0, 0, 1, -1),
+      n = mutate_into$n)
   }
-  # Merge classes with same mutation_rate and fitness
+  # Combine the non-mutants and the mutants into a single data frame
+  next_gen <- bind_rows(
+    offspring %>%
+      mutate(n = n - mutants) %>%
+      select(-mutants),
+    bind_rows(next_gen_list))
+  # Merge classes with same mu and fitness
   next_gen <- next_gen %>%
-    group_by(mutation_rate, fitness) %>%
-    summarize(individuals = sum(individuals), .groups = "drop")
+    group_by(mu, w) %>%
+    summarize(n = sum(n), .groups = "drop")
   return(next_gen)
 }
+
 
 # Selection function
-selection <- function(next_gen, population_size) {
-  # Keep population size constant
-  current_pop <- sum(next_gen$individuals)
-  next_gen$individuals <- rbinom(length(next_gen), next_gen$individuals, min(1,population_size / current_pop))
-  # Remove classes with zero individuals
+selection <- function(next_gen, size) {
+  # Keep pop size constant
+  current_pop <- sum(next_gen$n)
+  next_gen$n <- rbinom(nrow(next_gen), next_gen$n, min(1, size / current_pop))
+  # Remove classes with zero n
   next_gen <- next_gen %>%
-    filter(individuals > 0)
+    filter(n > 0)
   return(next_gen)
 }
 
-# Initialize population
-population <- data.frame(
-  mutation_rate = init_mutation_rate,   # log10 of initial mutation rate
-  fitness = init_fitness,    # initial fitness
-  individuals = population_size    # initial population size
-)
-# Initialize data frame for statistics
-stats <- data.frame(generation = integer(), avg_mutation_rate = numeric(), avg_fitness = numeric())
+evolve <- function(
+  size = 1e2, # Number of individuals in the population
+  init_mu = -2, # Since we are storing it in log10 format
+  init_w = 0, # Represented by the net number of beneficial mutations
+  a = 0.1, # Proportion of mutations that affect mutation rate
+  p_mu_up = 0.5, # Proportion of mutations that increase mutation rate
+  jump = 1e-1, # Size of mutation rate change, increase or decrease
+  p_w_up = 0.1, # Proportion of mutations that increase fitness
+  generations = 1e1, # Number of generations to simulate
+  s = 1e-2 # Parameter for fitness advantage/disadvantage
+) {
+  # Initialize pop
+  pop <- data.frame(
+    mu = init_mu,   # log10 of initial mutation rate
+    w = init_w,    # initial fitness
+    n = size    # initial pop size
+  )
+  # Initialize data frame for statistics
+  stats <- data.frame(generation = 0:generations, mu = init_mu, w = init_w)
 
-# Simulation loop
-system.time(for (i in 1:generations) {
-  # Step 1: Reproduction
-  offspring <- reproduce(population)
+  # Simulation loop
+  for (i in 1:generations) {
+    # Step 1: Reproduction
+    offspring <- reproduce(pop, s)
 
-  # Step 2: Mutation
-  next_gen <- mutate(offspring, alpha, p_increase, mutation_jump_size, p_beneficial)
+    # Step 2: Mutation
+    next_gen <- do_mutations(offspring, a, p_mu_up, jump, p_w_up, s)
 
-  # Step 3: Selection
-  population <- selection(next_gen, population_size)
+    # Step 3: Selection
+    pop <- selection(next_gen, size)
 
-  # Save statistics for this generation
-  stats <- rbind(stats, data.frame(generation = i, avg_mutation_rate = 10^(mean(population$mutation_rate)), avg_fitness_score = (1 + s)^mean(population$fitness_score)))
-})
+    # Save statistics for this generation
+    stats[stats$generation == i, "mu"] <- weighted.mean(pop$mu, pop$n)
+    stats[stats$generation == i, "w"] <- weighted.mean(pop$w, pop$n)
+  }
+  return(list(pop = pop, stats = stats))
+}
 
-# Plot the results
-library(ggplot2)
+# Save the pop and statistics
+system.time({results <- evolve(size = 1e6, generations = 1e3)})
+pop <- results$pop
+stats <- results$stats
 
 # Plot average mutation rate over generations
 ggplot(stats, aes(x = generation)) +
-  geom_line(aes(y = avg_mutation_rate), color = "blue") +
-  labs(x = "Generation", y = "Average Mutation Rate", 
+  geom_line(aes(y = mu), color = "blue") +
+  labs(x = "Generation", y = "Average Mutation Rate",
        title = "Average Mutation Rate Over Generations") +
   theme_minimal() +
   theme(
@@ -94,9 +111,24 @@ ggplot(stats, aes(x = generation)) +
 
 # Plot average fitness score over generations
 ggplot(stats, aes(x = generation)) +
-  geom_line(aes(y = avg_fitness_score), color = "red") +
-  labs(x = "Generation", y = "Average Fitness Score", 
+  geom_line(aes(y = w), color = "red") +
+  labs(x = "Generation", y = "Average Fitness Score",
        title = "Average Fitness Score Over Generations") +
+  theme_minimal() +
+  theme(
+      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20)
+    )
+
+# Plot a heatmap of the pop
+ggplot(pop, aes(x = mu, y = w)) +
+  geom_tile(aes(fill = n)) +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(x = "Mutation Rate", y = "Fitness",
+       title = "pop Heatmap") +
   theme_minimal() +
   theme(
       plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
