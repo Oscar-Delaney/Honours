@@ -6,40 +6,27 @@ reproduce <- function(pop, s) {
   return(pop)
 }
 
-# Mutation function
-do_mutations <- function(offspring, a, p_mu_up, jump, p_w_up, s) {
-  # Calculate the number of mutants in each class
-  offspring <- offspring %>%
-    mutate(mutants = rbinom(n(), n, 10^mu))
-  # Calculate probabilities of each type of mutation
-  p_vec <- c(a * c(p_mu_up, 1 - p_mu_up), (1 - a) * c(p_w_up, 1 - p_w_up))
-  # Create a list to hold data frames
-  next_gen_list <- vector("list", nrow(offspring))
-  # Add rows for each mutant
-  for (i in seq_len(nrow(offspring))) {
-    # Generate counts for each mutation type
-    mutate_into <- data.frame(n = tabulate(
-      sample(4, size = offspring$mutants[i], replace = TRUE, prob = p_vec),
-      nbins = 4))
-    # Create a data frame for this class and add to the list
-    next_gen_list[[i]] <- data.frame(
-      mu = offspring$mu[i] + jump * c(1, -1, 0, 0),
-      w = offspring$w[i] + c(0, 0, 1, -1),
-      n = mutate_into$n)
-  }
-  # Combine the non-mutants and the mutants into a single data frame
-  next_gen <- bind_rows(
-    offspring %>%
-      mutate(n = n - mutants) %>%
-      select(-mutants),
-    bind_rows(next_gen_list))
+do_mutations <- function(offspring, p_vec, jump) {
+  # Calculate the total number of mutants and non-mutants
+  total_mutants <- rbinom(nrow(offspring), offspring$n, 10^offspring$mu)
+  non_mutants <- offspring$n - total_mutants
+
+  # Generate counts for each mutation type
+  mutation_counts <- cbind(t(non_mutants),matrix(rmultinom(nrow(offspring), size = total_mutants, prob = p_vec), nrow = nrow(offspring)))
+
+  # Create a data frame for the next generation
+  next_gen <- data.frame(
+    mu = c(rep(offspring$mu, each = 5)) + jump * c(0, 1, -1, 0, 0),
+    w = c(rep(offspring$w, each = 5)) + c(0, 0, 0, 1, -1),
+    n = as.vector(t(mutation_counts))
+  )
+  
   # Merge classes with same mu and fitness
   next_gen <- next_gen %>%
     group_by(mu, w) %>%
     summarize(n = sum(n), .groups = "drop")
   return(next_gen)
 }
-
 
 # Selection function
 selection <- function(next_gen, size) {
@@ -71,14 +58,16 @@ evolve <- function(
   )
   # Initialize data frame for statistics
   stats <- data.frame(generation = 0:generations, mu = init_mu, w = init_w)
-
+  # Calculate probabilities of each type of mutation
+  p_vec <- c(a * c(p_mu_up, 1 - p_mu_up), (1 - a) * c(p_w_up, 1 - p_w_up))
+  print(p_vec)
   # Simulation loop
   for (i in 1:generations) {
     # Step 1: Reproduction
     offspring <- reproduce(pop, s)
 
     # Step 2: Mutation
-    next_gen <- do_mutations(offspring, a, p_mu_up, jump, p_w_up, s)
+    next_gen <- do_mutations(offspring, p_vec, jump)
 
     # Step 3: Selection
     pop <- selection(next_gen, size)
@@ -91,7 +80,7 @@ evolve <- function(
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(size = 1e6, generations = 1e3)})
+system.time({results <- evolve(size = 1e6, generations = 1e2, p_mu_up = 1, p_w_up = 0)})
 pop <- results$pop
 stats <- results$stats
 
