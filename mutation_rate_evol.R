@@ -1,14 +1,14 @@
 library(tidyverse)
 
 # Reproduction function
-reproduce <- function(pop, r, s) {
-  pop$n <- rpois(nrow(pop), lambda = pop$n * r * (1 + s) ^ pop$w)
+reproduce <- function(pop, s, r, r_max) {
+  pop$n <- rpois(nrow(pop), lambda = pop$n * 1 / ((((1 + s) ^ -pop$w) / r) + 1 / r_max) )
   return(pop)
 }
 
 do_mutations <- function(offspring, p_vec, jump) {
   # Calculate the total number of mutants and non-mutants
-  mutants <- pmin(1e9,rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu)))
+  mutants <- rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu))
   non_mutants <- offspring$n - mutants
   
   # Generate counts for each mutation type, and combine with non-mutants
@@ -50,7 +50,8 @@ evolve <- function(
   p_w_up = 0.1, # Proportion of mutations that increase fitness
   generations = 1e1, # Number of generations to simulate
   s = 1e-2, # Parameter for fitness advantage/disadvantage
-  r = 1 # Parameter for baseline reproduction rate
+  r = 1, # Parameter for baseline reproduction rate
+  r_max = 1e5 # Parameter for maximum reproduction rate
 ) {
   # Initialize pop
   pop <- data.frame(
@@ -66,7 +67,7 @@ evolve <- function(
   # Simulation loop
   for (i in 1:generations) {
     # Step 1: Reproduction
-    offspring <- reproduce(pop, r, s)
+    offspring <- reproduce(pop, s, r, r_max)
 
     # Step 2: Mutation
     next_gen <- do_mutations(offspring, p_vec, jump)
@@ -87,7 +88,7 @@ evolve <- function(
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(size = 1e6, generations = 1e3, r = 1, s = 0.1, init_mu = -1, jump = 0.1, p_mu_up = 0.9, p_w_up = 0.1)})
+system.time({results <- evolve(size = 1e6, generations = 1e4, r = 1, s = 0.1, init_mu = -3, jump = 0.1, p_mu_up = 0.5, p_w_up = 0.1)})
 pop <- results$pop
 stats <- results$stats
 
