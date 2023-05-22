@@ -1,18 +1,34 @@
 library(tidyverse)
 
+# Reproduction rate function
+rate <- function(w, s, r, r_max) {
+  return(1 / ((((1 + s) ^ -w) / r) + 1 / r_max))
+}
 # Reproduction function
-reproduce <- function(pop, s, r, r_max) {
-  pop$n <- rpois(nrow(pop), lambda = pop$n * 1 / ((((1 + s) ^ -pop$w) / r) + 1 / r_max) )
+reproduce <- function(pop, s, r, r_max, det) {
+  growth <- rate(pop$w, s, r, r_max)
+  if (det) {
+    n <- pop$n * growth
+    pop$n <- n / sum(n) * sum(pop$n)
+  } else {
+  pop$n <- rpois(nrow(pop), lambda = pop$n * growth)
+  }
   return(pop)
 }
 
-do_mutations <- function(offspring, p_vec, jump) {
+do_mutations <- function(offspring, p_vec, jump, det) {
   # Calculate the total number of mutants and non-mutants
-  mutants <- rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu))
-  non_mutants <- offspring$n - mutants
-  
+  if (det) {
+    mutants <- offspring$n * pmin(1, 10^offspring$mu)
+    non_mutants <- offspring$n - mutants
+    m_counts <- outer(p_vec, mutants, "*")
+  } else {
+    mutants <- rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu))
+    non_mutants <- offspring$n - mutants
+    m_counts <- sapply(mutants, function(x) rmultinom(1, size = x, prob = p_vec))
+  }
+
   # Generate counts for each mutation type, and combine with non-mutants
-  m_counts <- sapply(mutants, function(x) rmultinom(1, size = x, prob = p_vec))
   class_counts <- rbind(non_mutants, m_counts)
 
   # Create a data frame for the next generation
@@ -30,13 +46,15 @@ do_mutations <- function(offspring, p_vec, jump) {
 }
 
 # Selection function
-selection <- function(next_gen, size) {
-  # Keep pop size constant
-  current_pop <- sum(next_gen$n)
-  next_gen$n <- rbinom(nrow(next_gen), next_gen$n, min(1, size / current_pop))
+selection <- function(next_gen, size, sensitivity, det) {
+  if (!det) {
+    # Keep pop size constant
+    current_pop <- sum(next_gen$n)
+    next_gen$n <- rbinom(nrow(next_gen), next_gen$n, min(1, size / current_pop))
+  }
   # Remove classes with zero n
   next_gen <- next_gen %>%
-    filter(n > 0)
+    filter(n > sensitivity)
   return(next_gen)
 }
 
@@ -51,13 +69,15 @@ evolve <- function(
   generations = 1e1, # Number of generations to simulate
   s = 1e-2, # Parameter for fitness advantage/disadvantage
   r = 1, # Parameter for baseline reproduction rate
-  r_max = 1e5 # Parameter for maximum reproduction rate
+  r_max = 1e5, # Parameter for maximum reproduction rate
+  sensitivity = 1e-10, # Parameter for minimum detectable population size
+  det = FALSE # Whether the model is deterministic
 ) {
   # Initialize pop
   pop <- data.frame(
     mu = init_mu,   # log10 of initial mutation rate
     w = init_w,    # initial fitness
-    n = size    # initial pop size
+    n = size ^ !det    # initial pop size
   )
   # Initialize data frame for statistics
   stats <- data.frame(generation = 0:generations, mu = mean(init_mu), w = init_w)
@@ -67,13 +87,13 @@ evolve <- function(
   # Simulation loop
   for (i in 1:generations) {
     # Step 1: Reproduction
-    offspring <- reproduce(pop, s, r, r_max)
+    offspring <- reproduce(pop, s, r, r_max, det)
 
     # Step 2: Mutation
-    next_gen <- do_mutations(offspring, p_vec, jump)
+    next_gen <- do_mutations(offspring, p_vec, jump, det)
 
     # Step 3: Selection
-    pop <- selection(next_gen, size)
+    pop <- selection(next_gen, size, sensitivity, det)
     if (nrow(pop) == 0) {
       print("Population went extinct!")
       break
@@ -88,7 +108,7 @@ evolve <- function(
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(size = 1e6, generations = 1e4, r = 1, s = 0.1, init_mu = -3, jump = 0.1, p_mu_up = 0.5, p_w_up = 0.1)})
+system.time({results <- evolve(sensitivity = 1e-15, r_max = Inf, det = T, size = 1e6, generations = 1e4, r = 2, s = 0.01, init_mu = -2, jump = 0.1, p_mu_up = 0.5, p_w_up = 0.01)})
 pop <- results$pop
 stats <- results$stats
 
@@ -134,4 +154,4 @@ ggplot(pop, aes(x = mu, y = w)) +
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
-print(pop[pop$n>1e4,],n=50)
+print(pop[pop$n>1e-4,],n=50)
