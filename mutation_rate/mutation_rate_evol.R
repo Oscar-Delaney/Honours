@@ -108,9 +108,10 @@ evolve <- function(
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(sensitivity = 1e-15, r_max = Inf, det = T, size = 1e6, generations = 1e4, r = 2, s = 0.01, init_mu = -2, jump = 0.1, p_mu_up = 0.5, p_w_up = 0.01)})
+system.time({results <- evolve(generations = 1e3, init_mu = seq(-2,0,by=0.5), sensitivity = 1e-15, r_max = Inf, det = T, size = 1e6, r = 1, s = 0.1, jump = 0, p_mu_up = 0.5, p_w_up = 1e-6)})
 pop <- results$pop
 stats <- results$stats
+tail(stats)
 
 # Plot average mutation rate over generations
 ggplot(stats, aes(x = generation)) +
