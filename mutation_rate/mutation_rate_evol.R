@@ -9,7 +9,7 @@ reproduce <- function(pop, s, r, r_max, det) {
   growth <- rate(pop$w, s, r, r_max)
   if (det) {
     n <- pop$n * growth
-    pop$n <- n / sum(n) * sum(pop$n)
+    pop$n <- n / sum(n)
   } else {
   pop$n <- rpois(nrow(pop), lambda = pop$n * growth)
   }
@@ -58,6 +58,7 @@ selection <- function(next_gen, size, sensitivity, det) {
   return(next_gen)
 }
 
+# Function to run the simulation
 evolve <- function(
   size = 1e2, # Number of individuals in the population
   init_mu = -2, # Since we are storing it in log10 format
@@ -107,52 +108,42 @@ evolve <- function(
   return(list(pop = pop, stats = stats))
 }
 
+# Function to graph mutation rate or fitness
+plot_univariate <- function(stats, var, y_label) {
+  ggplot(stats, aes(x = generation)) +
+    geom_line(aes(y = get(var)), color = "blue") +
+    labs(x = "Generations", y = y_label) +
+    theme_minimal() +
+  theme(
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+    )
+}
+
+# Function to plot heatmap of population
+plot_heatmap <- function(pop) {
+  ggplot(pop, aes(x = mu, y = w)) +
+    geom_tile(aes(fill = n)) +
+    scale_fill_gradient(low = "white", high = "blue") +
+    labs(x = "Mutation Rate", y = "Fitness",
+         title = "Final Population Distribution") +
+    theme_minimal() +
+  theme(
+      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20)
+    )
+}
+
 # Save the pop and statistics
-system.time({results <- evolve(generations = 1e3, init_mu = seq(-2,0,by=0.5), sensitivity = 1e-15, r_max = Inf, det = T, size = 1e6, r = 1, s = 0.1, jump = 0, p_mu_up = 0.5, p_w_up = 1e-6)})
+system.time({results <- evolve(generations = 1e3, init_mu = seq(-2,-1,by=0.1), sensitivity = 1e-25, r_max = Inf, det = T, size = 1e6, r = 1, s = 0.1, jump = 0, p_mu_up = 0.5, p_w_up = 1e-6)})
 pop <- results$pop
 stats <- results$stats
 tail(stats)
 
-# Plot average mutation rate over generations
-ggplot(stats, aes(x = generation)) +
-  geom_line(aes(y = mu), color = "blue") +
-  labs(x = "Generation", y = "Average Mutation Rate",
-       title = "Average Mutation Rate Over Generations") +
-  theme_minimal() +
-  theme(
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20)
-    )
-
-# Plot average fitness score over generations
-ggplot(stats, aes(x = generation)) +
-  geom_line(aes(y = w), color = "red") +
-  labs(x = "Generation", y = "Average Fitness Score",
-       title = "Average Fitness Score Over Generations") +
-  theme_minimal() +
-  theme(
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20)
-    )
-
-# Plot a heatmap of the pop
-ggplot(pop, aes(x = mu, y = w)) +
-  geom_tile(aes(fill = n)) +
-  scale_fill_gradient(low = "white", high = "blue") +
-  labs(x = "Mutation Rate", y = "Fitness",
-       title = "pop Heatmap") +
-  theme_minimal() +
-  theme(
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20)
-    )
-print(pop[pop$n>1e-4,],n=50)
+# Plot the results
+plot_univariate(stats, "mu", "log_10 Average Mutation Rate")
+plot_univariate(stats, "w", "Average Fitness Score")
+plot_heatmap(pop)
