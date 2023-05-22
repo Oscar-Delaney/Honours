@@ -1,23 +1,23 @@
 library(tidyverse)
 
 # Reproduction function
-reproduce <- function(pop, s) {
-  pop$n <- rpois(nrow(pop), lambda = pop$n * (1 + s) ^ pop$w)
+reproduce <- function(pop, r, s) {
+  pop$n <- rpois(nrow(pop), lambda = pop$n * r * (1 + s) ^ pop$w)
   return(pop)
 }
 
 do_mutations <- function(offspring, p_vec, jump) {
   # Calculate the total number of mutants and non-mutants
-  mutants <- rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu))
+  mutants <- pmin(1e9,rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu)))
   non_mutants <- offspring$n - mutants
-
+  
   # Generate counts for each mutation type, and combine with non-mutants
   m_counts <- sapply(mutants, function(x) rmultinom(1, size = x, prob = p_vec))
   class_counts <- rbind(non_mutants, m_counts)
 
   # Create a data frame for the next generation
   next_gen <- data.frame(
-    mu = rep(offspring$mu, each = 5) + jump * c(0, 1, -1, 0, 0),
+    mu = round(rep(offspring$mu, each = 5) + jump * c(0, 1, -1, 0, 0),2),
     w = rep(offspring$w, each = 5) + c(0, 0, 0, 1, -1),
     n = as.vector(class_counts)
   )
@@ -49,7 +49,8 @@ evolve <- function(
   jump = 1e-1, # Size of mutation rate change, increase or decrease
   p_w_up = 0.1, # Proportion of mutations that increase fitness
   generations = 1e1, # Number of generations to simulate
-  s = 1e-2 # Parameter for fitness advantage/disadvantage
+  s = 1e-2, # Parameter for fitness advantage/disadvantage
+  r = 1 # Parameter for baseline reproduction rate
 ) {
   # Initialize pop
   pop <- data.frame(
@@ -65,7 +66,7 @@ evolve <- function(
   # Simulation loop
   for (i in 1:generations) {
     # Step 1: Reproduction
-    offspring <- reproduce(pop, s)
+    offspring <- reproduce(pop, r, s)
 
     # Step 2: Mutation
     next_gen <- do_mutations(offspring, p_vec, jump)
@@ -86,7 +87,7 @@ evolve <- function(
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(size = 1e6, generations = 1e3, init_mu = c(-5,-1), p_mu_up = 0.5, p_w_up = 1)})
+system.time({results <- evolve(size = 1e6, generations = 1e3, r = 1, s = 0.1, init_mu = -1, jump = 0.1, p_mu_up = 0.9, p_w_up = 0.1)})
 pop <- results$pop
 stats <- results$stats
 
@@ -132,3 +133,4 @@ ggplot(pop, aes(x = mu, y = w)) +
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
     )
+print(pop[pop$n>1e4,],n=50)
