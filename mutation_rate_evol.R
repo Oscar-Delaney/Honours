@@ -8,19 +8,25 @@ reproduce <- function(pop, s) {
 
 do_mutations <- function(offspring, p_vec, jump) {
   # Calculate the total number of mutants and non-mutants
-  total_mutants <- rbinom(nrow(offspring), offspring$n, 10^offspring$mu)
-  non_mutants <- offspring$n - total_mutants
+  if (max(10^offspring$mu) > 1) {
+    stop("Mutation rate is too high!")
+  }
+  mutants <- rbinom(nrow(offspring), offspring$n, 10^offspring$mu)
+  non_mutants <- offspring$n - mutants
 
-  # Generate counts for each mutation type
-  mutation_counts <- cbind(t(non_mutants),matrix(rmultinom(nrow(offspring), size = total_mutants, prob = p_vec), nrow = nrow(offspring)))
-
+  # Generate counts for each mutation type, and combine with non-mutants
+  # m_counts <- sapply(mutants, function(x) rmultinom(1, size = x, prob = p_vec))
+  # create m_counts this time with tryCatch and print x if there is an error
+  m_counts <- sapply(mutants, function(x) tryCatch(rmultinom(1, size = x, prob = p_vec), error = function(e) print(x)))
+  
+  class_counts <- rbind(non_mutants, m_counts)
   # Create a data frame for the next generation
   next_gen <- data.frame(
-    mu = c(rep(offspring$mu, each = 5)) + jump * c(0, 1, -1, 0, 0),
-    w = c(rep(offspring$w, each = 5)) + c(0, 0, 0, 1, -1),
-    n = as.vector(t(mutation_counts))
+    mu = rep(offspring$mu, each = 5) + jump * c(0, 1, -1, 0, 0),
+    w = rep(offspring$w, each = 5) + c(0, 0, 0, 1, -1),
+    n = as.vector(class_counts)
   )
-  
+
   # Merge classes with same mu and fitness
   next_gen <- next_gen %>%
     group_by(mu, w) %>%
@@ -60,27 +66,49 @@ evolve <- function(
   stats <- data.frame(generation = 0:generations, mu = init_mu, w = init_w)
   # Calculate probabilities of each type of mutation
   p_vec <- c(a * c(p_mu_up, 1 - p_mu_up), (1 - a) * c(p_w_up, 1 - p_w_up))
-  print(p_vec)
-  # Simulation loop
-  for (i in 1:generations) {
-    # Step 1: Reproduction
+
+# Simulation loop
+for (i in 1:generations) {
+  # Step 1: Reproduction
+  tryCatch({
     offspring <- reproduce(pop, s)
+  }, error = function(e) {
+    stop(paste("Error in reproduce function at generation", i, ":", e$message))
+  })
 
-    # Step 2: Mutation
+  # Step 2: Mutation
+  tryCatch({
     next_gen <- do_mutations(offspring, p_vec, jump)
+  }, error = function(e) {
+    stop(paste("Error in do_mutations function at generation", i, ":", e$message))
+  })
 
-    # Step 3: Selection
+  # Step 3: Selection
+  tryCatch({
     pop <- selection(next_gen, size)
+  }, error = function(e) {
+    stop(paste("Error in selection function at generation", i, ":", e$message))
+  })
+  
+  if (nrow(pop) == 0) {
+    print("Population went extinct!")
+    break
+  }
 
-    # Save statistics for this generation
+  # Save statistics for this generation
+  tryCatch({
     stats[stats$generation == i, "mu"] <- weighted.mean(pop$mu, pop$n)
     stats[stats$generation == i, "w"] <- weighted.mean(pop$w, pop$n)
-  }
+  }, error = function(e) {
+    stop(paste("Error in saving statistics at generation", i, ":", e$message))
+  })
+}
+
   return(list(pop = pop, stats = stats))
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(size = 1e6, generations = 1e2, p_mu_up = 1, p_w_up = 0)})
+system.time({results <- evolve(size = 1e6, generations = 5e2, p_mu_up = 1, p_w_up = 1)})
 pop <- results$pop
 stats <- results$stats
 
