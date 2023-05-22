@@ -8,7 +8,7 @@ reproduce <- function(pop, s) {
 
 do_mutations <- function(offspring, p_vec, jump) {
   # Calculate the total number of mutants and non-mutants
-  mutants <- rbinom(nrow(offspring), offspring$n, min(1, 10^offspring$mu))
+  mutants <- rbinom(nrow(offspring), offspring$n, pmin(1, 10^offspring$mu))
   non_mutants <- offspring$n - mutants
 
   # Generate counts for each mutation type, and combine with non-mutants
@@ -58,7 +58,7 @@ evolve <- function(
     n = size    # initial pop size
   )
   # Initialize data frame for statistics
-  stats <- data.frame(generation = 0:generations, mu = init_mu, w = init_w)
+  stats <- data.frame(generation = 0:generations, mu = mean(init_mu), w = init_w)
   # Calculate probabilities of each type of mutation
   p_vec <- c(a * c(p_mu_up, 1 - p_mu_up), (1 - a) * c(p_w_up, 1 - p_w_up))
 
@@ -86,7 +86,7 @@ evolve <- function(
 }
 
 # Save the pop and statistics
-system.time({results <- evolve(size = 1e6, generations = 5e3, p_mu_up = 0.5, p_w_up = 0.1)})
+system.time({results <- evolve(size = 1e6, generations = 1e3, init_mu = c(-5,-1), p_mu_up = 0.5, p_w_up = 1)})
 pop <- results$pop
 stats <- results$stats
 
