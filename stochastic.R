@@ -126,10 +126,11 @@ single_run <- function(config, x) {
     # Initialise the state variables
     state <- c(init, N = N0, influx * pattern)
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
-    event_times <- sort(unique(round(c(seq(0, time, tau), seq(0, time, dose_gap)),12)))
-    for (t in event_times) {
+    event_times <- sort(unique(round(c(time, seq(0, time, tau),
+      seq(0, time, dose_gap)), 12)))
+    for (t in event_times[event_times != time]) {
       # Determine the time until the next bottleneck or dose
-      end <- min(c(event_times[event_times > t], time) - t)
+      end <- min(event_times[event_times > t] - t)
       # Run the model between events, deterministically or stochastically
       if (deterministic) {
         times <- time_grid[time_grid <= end]
