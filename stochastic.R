@@ -128,12 +128,12 @@ single_run <- function(config, x) {
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     event_times <- sort(unique(round(c(time, seq(0, time, tau),
       seq(0, time, dose_gap)), 12)))
-    for (t in event_times[event_times != time]) {
+    for (t in event_times[event_times <= time - dt]) {
       # Determine the time until the next bottleneck or dose
       end <- min(event_times[event_times > t] - t)
       # Run the model between events, deterministically or stochastically
       if (deterministic) {
-        times <- time_grid[time_grid <= end]
+        times <- time_grid[time_grid <= end + 1e-12]
         new <- ode(state, times, ode_rates, config)
       } else {
         if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
