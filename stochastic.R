@@ -36,7 +36,7 @@ event <- function(state, config) {
     pops <- state[names(init)] # extract just the cell counts
     N <- state["N"] # extract the nutrient concentration
     drugs <- state[c("A1", "A2")] # extract the drug concentrations
-    if (round(t / tau, 12) %% 1 == 0) {
+    if (round(t / tau, 10) %% 1 == 0) {
       if (deterministic) {
         pops <- pops * D
       } else {
@@ -45,7 +45,7 @@ event <- function(state, config) {
       N <- N * D + N0 * (1 - D)
       drugs <- drugs * D
     }
-    if (round(t / dose_gap, 12) %% 1 == 0) {
+    if (round(t / dose_gap, 10) %% 1 == 0) {
       drugs <- drugs * keep_old_drugs + influx * pattern
     }
     return(c(pops, N, drugs))
@@ -127,13 +127,13 @@ single_run <- function(config, x) {
     state <- c(init, N = N0, influx * pattern)
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     event_times <- sort(unique(round(c(time, seq(0, time, tau),
-      seq(0, time, dose_gap)), 12)))
+      seq(0, time, dose_gap)), 10)))
     for (t in event_times[event_times <= time - dt]) {
       # Determine the time until the next bottleneck or dose
       end <- min(event_times[event_times > t] - t)
       # Run the model between events, deterministically or stochastically
       if (deterministic) {
-        times <- time_grid[time_grid <= end + 1e-12]
+        times <- time_grid[time_grid <= end + 1e-10]
         new <- ode(state, times, ode_rates, config)
       } else {
         if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
@@ -214,7 +214,7 @@ simulate <- function(
   return(list(long, config))
 }
 
-log_plot <- function(solutions, type = "mean") {
+log_plot <- function(solutions, type = "all") {
   # Choose the type of central tendency and range to plot
   if (type == "mean") {
     summary <- solutions %>%
@@ -315,5 +315,6 @@ log_plot <- function(solutions, type = "mean") {
   print(plot)
 }
 
-system.time(log_plot(simulate(time = 200,bactericidal = 0, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
+# system.time(log_plot(simulate(time = 200,bactericidal = 0, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
+log_plot(simulate(tau = 0.1, time = 110, mu = 1, dose_gap = 1e3, D = 0.9)[[1]])

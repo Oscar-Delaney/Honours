@@ -136,7 +136,7 @@ for (i in seq_len(nrow(summary))) {
         deterministic = TRUE,
         stewardship = "comb",
         time = 50,
-        freq = 1000,
+        tau = 1000,
         D = 1,
         N0 = summary$N0[i],
         HGT = 0,
@@ -176,19 +176,82 @@ sol[sol$variable =="N",]
 
 # Critique of Wahl papers
 source("stochastic.R")
-log_plot(data[[10]][[1]][data[[1]][[1]]$rep > 99, ], type = "all")
+# tau = 0.1
+log_plot(wahl2(rep = 1, tau = 0.10, D = 0.9)[[1]], type = "all")
+log_plot(simulate(tau = 0.1, time = 300, mu = 1, dose_gap = 1e3, D = 0.9)[[1]])
+# No resource constraints
+wahl1 <- function(rep, tau, D) {
+    sols <- simulate(
+        seed = NULL,
+        rep = rep,
+        tau = tau,
+        D = D,
+        influx = c(A1 = 0, A2 = 0),
+        N0 = 1,
+        alpha = 0,
+        k = 0,
+        m1 = 1e-9,
+        m2 = 0,
+        mu = c(S = 1.025, R1 = 1.025 + s),
+        init = c(S = round(3e8 * D), R1 = 0, R2 = 0, R12 = 0)
+    )
+}
+
+# Constant resource concentration in dilution media
+wahl2 <- function(rep, tau, D) {
+    sols <- simulate(
+        deterministic = TRUE,
+        dt = 0.01,
+        seed = NULL,
+        time = 400,
+        rep = rep,
+        tau = tau,
+        D = D,
+        influx = c(A1 = 0, A2 = 0),
+        N0 = 3e8,
+        alpha = 1,
+        k = 3e7,
+        m1 = 1e-99,
+        m2 = 0,
+        mu = c(S = 1.15, R1 = 1.15 + s),
+        init = c(S = round(3e8 * D), R1 = 0, R2 = 0, R12 = 0)
+    )
+}
+
+# Constant total resource supply per time
+wahl3 <- function(rep, tau, D) {
+    sols <- simulate(
+        seed = NULL,
+        rep = rep,
+        tau = tau,
+        D = D,
+        influx = c(A1 = 0, A2 = 0),
+        N0 = 1e10 * tau / (1 - D),
+        alpha = 1,
+        k = 1e9,
+        m1 = 1e-9,
+        m2 = 0,
+        mu = c(S = 1.2, R1 = 1.2 + s),
+        init = c(S = round(1e10 * D), R1 = 0, R2 = 0, R12 = 0)
+    )
+}
+
+log_plot(data[[1]][[1]][data[[1]][[1]]$rep >= 90, ], type = "all")
+
+
+# Wahl 1
+summary <- data.frame(tau = seq(0.1, 3, by = 0.1))
+summary$D <- exp(-summary$tau)
+
+# Wahl 2
+summary <- expand.grid(tau = seq(0.1, 3, 0.2), D = exp(-seq(0.1, 3, 0.2)))
+
+# General
 s <- 0.1
-summary <- data.frame(freq = seq(0.1, 3, by = 0.1))
-summary$D <- exp(-summary$freq)
 summary$wins <- 0
 data <- list()
 for (i in seq_len(nrow(summary))) {
-    freq <- summary$freq[i]
-    D <- exp(-freq)
-    sols <- simulate(rep = 100, freq = freq, D = D, N0 = 1e8, 
-        m2 = 0, k = 1e7, alpha = 1, influx = c(A1 = 0, A2 = 0),
-        mu = c(S=1.2,R1=1.2+s), init = c(S=round(1e8*D),R1=0,R2=0,R12=0))
-    data[[i]] <- sols
+    data[[i]] <- wahl2(rep = 100, tau = summary$tau[i], D = summary$D[i])
 }
 
 # calculate summary statistics
@@ -206,13 +269,28 @@ ggplot(summary, aes(x = D, y = wins)) +
     geom_point() +
     theme_light() +
     labs(
-        title = "Optimal Dilution Ratio (resource constrained)",
+        title = "Optimal Dilution Ratio (resource unconstrained)",
         x = "D",
-        y = "Probability that a mutant fixes"
+        y = "Probability that a mutant fixes in 100 hours"
     ) +
     theme(
         plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
         axis.title = element_text(size = 25, face = "bold"),
         axis.text = element_text(size = 25)
     )
-summary
+
+ggplot(summary, aes(x = D, y = tau)) +
+    geom_tile(aes(fill = wins)) +
+    scale_fill_gradient(low = "white", high = "blue") +
+    labs(x = "D", y = "tau", fill = "proportion",
+            title = "Optimal Dilution Ration",
+            subtitle = "proportion of runs where R1 becomes established") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 25, hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20)
+    )
