@@ -36,7 +36,7 @@ event <- function(state, config) {
     pops <- state[names(init)] # extract just the cell counts
     N <- state["N"] # extract the nutrient concentration
     drugs <- state[c("A1", "A2")] # extract the drug concentrations
-    if (t %% tau == 0) {
+    if (round(t / tau, 12) %% 1 == 0) {
       if (deterministic) {
         pops <- pops * D
       } else {
@@ -45,7 +45,7 @@ event <- function(state, config) {
       N <- N * D + N0 * (1 - D)
       drugs <- drugs * D
     }
-    if (t %% dose_gap == 0) {
+    if (round(t / dose_gap, 12) %% 1 == 0) {
       drugs <- drugs * keep_old_drugs + influx * pattern
     }
     return(c(pops, N, drugs))
@@ -126,10 +126,10 @@ single_run <- function(config, x) {
     # Initialise the state variables
     state <- c(init, N = N0, influx * pattern)
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
-    t <- 0
-    while (t < time) {
+    event_times <- sort(unique(round(c(seq(0, time, tau), seq(0, time, dose_gap)),12)))
+    for (t in event_times) {
       # Determine the time until the next bottleneck or dose
-      end <- min(tau - t %% tau, dose_gap - t %% dose_gap)
+      end <- min(c(event_times[event_times > t], time) - t)
       # Run the model between events, deterministically or stochastically
       if (deterministic) {
         times <- time_grid[time_grid <= end]
@@ -147,8 +147,6 @@ single_run <- function(config, x) {
       new[1, "time"] <- new[1, "time"] * (1 + 1e-6)
       # Update the solution
       solution <- if (t == 0) new else rbind(solution, new)
-      # Update the time
-      t <- t + end
       # flip the pattern after the appropriate number of infusions of the drug
       if (cycl && round((t / dose_gap), 5) %% dose_rep == 0) {
         config$pattern <- 1 - config$pattern
