@@ -6,8 +6,8 @@ library(future)
 library(future.apply)
 
 # floating point compatible version of x%%y = 0
-is.multiple <- function(smaller, larger) {
-  ratio <- larger / smaller
+is.multiple <- function(denominator, numerator) {
+  ratio <- numerator / denominator
   near_int <- round(ratio)
   return(near(ratio, near_int))
 }
@@ -44,7 +44,6 @@ event <- function(state, config) {
     N <- state["N"] # extract the nutrient concentration
     drugs <- state[c("A1", "A2")] # extract the drug concentrations
     if (is.multiple(tau, t)) {
-      # print(c(t,tau,round(t / tau, 10) %% 1 == 0))
       if (deterministic) {
         pops <- pops * D
       } else {
@@ -136,7 +135,7 @@ single_run <- function(config, x) {
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     event_times <- sort(unique(round(c(time, seq(0, time, tau),
       seq(0, time, dose_gap)), 10)))
-    for (t in event_times[event_times <= time - dt]) {
+    for (t in event_times[-length(event_times)]) {
       # Determine the time until the next bottleneck or dose
       end <- min(event_times[event_times > t] - t)
       # Run the model between events, deterministically or stochastically
@@ -323,6 +322,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-# system.time(log_plot(simulate(time = 200,bactericidal = 0, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
+system.time(log_plot(simulate()[[1]], type = "all"))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
-log_plot(simulate(deterministic = T, tau = 0.11, time = 300, dt = 0.1, influx = c(A1 = 0, A2 = 0))[[1]])
