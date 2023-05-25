@@ -5,6 +5,13 @@ library(ggnewscale)
 library(future)
 library(future.apply)
 
+# floating point compatible version of x%%y = 0
+is.multiple <- function(smaller, larger) {
+  ratio <- larger / smaller
+  near_int <- round(ratio)
+  return(near(ratio, near_int))
+}
+
 # a pharmacodynamic function for singele-antibiotic induced killing of bacteria
 hill <- function(A, phi, zeta, kappa) {
   return(phi / (1 + (A / zeta)^(-kappa)))
@@ -36,7 +43,8 @@ event <- function(state, config) {
     pops <- state[names(init)] # extract just the cell counts
     N <- state["N"] # extract the nutrient concentration
     drugs <- state[c("A1", "A2")] # extract the drug concentrations
-    if (round(t / tau, 10) %% 1 == 0) {
+    if (is.multiple(tau, t)) {
+      # print(c(t,tau,round(t / tau, 10) %% 1 == 0))
       if (deterministic) {
         pops <- pops * D
       } else {
@@ -45,7 +53,7 @@ event <- function(state, config) {
       N <- N * D + N0 * (1 - D)
       drugs <- drugs * D
     }
-    if (round(t / dose_gap, 10) %% 1 == 0) {
+    if (is.multiple(dose_gap, t)) {
       drugs <- drugs * keep_old_drugs + influx * pattern
     }
     return(c(pops, N, drugs))
@@ -133,7 +141,7 @@ single_run <- function(config, x) {
       end <- min(event_times[event_times > t] - t)
       # Run the model between events, deterministically or stochastically
       if (deterministic) {
-        times <- time_grid[time_grid <= end + 1e-10]
+        times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
         new <- ode(state, times, ode_rates, config)
       } else {
         if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
@@ -149,7 +157,7 @@ single_run <- function(config, x) {
       # Update the solution
       solution <- if (t == 0) new else rbind(solution, new)
       # flip the pattern after the appropriate number of infusions of the drug
-      if (cycl && round((t / dose_gap), 5) %% dose_rep == 0) {
+      if (cycl && is.multiple(dose_gap * dose_rep, t + end)) {
         config$pattern <- 1 - config$pattern
       }
       # Run the bottleneck and/or dose and update the state
@@ -317,4 +325,4 @@ log_plot <- function(solutions, type = "all") {
 
 # system.time(log_plot(simulate(time = 200,bactericidal = 0, influx = c(A1 = 10, A2 = 0), m2 = 0, tau = 20, dose_gap = 10, d1 = 0, d2 = 0, D = 1e-3, keep_old_drugs = FALSE)[[1]], type = "all"))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
-log_plot(simulate(tau = 0.1, time = 110, mu = 1, dose_gap = 1e3, D = 0.9)[[1]])
+log_plot(simulate(deterministic = T, tau = 0.11, time = 300, dt = 0.1, influx = c(A1 = 0, A2 = 0))[[1]])
