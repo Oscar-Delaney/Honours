@@ -173,12 +173,13 @@ write.csv(summary, file = "results/summary_stats2.csv", row.names = FALSE)
 sol = data[[3]] 
 sol[sol$variable =="N",]
 
-
+sol = wahl2(rep = 1, tau = 0.10, D = 0.9)[[1]]
+sol[sol$time >= 99, ]
 # Critique of Wahl papers
 source("stochastic.R")
 # tau = 0.1
 log_plot(wahl2(rep = 1, tau = 0.10, D = 0.9)[[1]], type = "all")
-log_plot(simulate(tau = 0.1, time = 300, mu = 1, dose_gap = 1e3, D = 0.9)[[1]])
+log_plot(simulate(deterministic = T, tau = 0.11, time = 100)[[1]])
 # No resource constraints
 wahl1 <- function(rep, tau, D) {
     sols <- simulate(
@@ -200,21 +201,21 @@ wahl1 <- function(rep, tau, D) {
 # Constant resource concentration in dilution media
 wahl2 <- function(rep, tau, D) {
     sols <- simulate(
-        deterministic = TRUE,
-        dt = 0.01,
+        deterministic = F,
         seed = NULL,
-        time = 400,
+        dt = 0.1,
+        time = 100,
         rep = rep,
         tau = tau,
         D = D,
         influx = c(A1 = 0, A2 = 0),
         N0 = 3e8,
         alpha = 1,
-        k = 3e7,
-        m1 = 1e-99,
+        k = 1e7,
+        m1 = 1e-90,
         m2 = 0,
         mu = c(S = 1.15, R1 = 1.15 + s),
-        init = c(S = round(3e8 * D), R1 = 0, R2 = 0, R12 = 0)
+        init = c(S = round(3e7 * D), R1 = 0, R2 = 0, R12 = 0)
     )
 }
 
