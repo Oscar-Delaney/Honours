@@ -66,7 +66,12 @@ log_plot(data[[11]][[1]][data[[1]][[1]]$rep >= 90, ], type = "all")
 
 # Calculate the summary statistics
 for (i in seq_len(nrow(summary))) {
-    summary$wins[i] <- metrics(data[[i]][[1]], data[[i]][[2]]$D)
+    sols <- data[[i]][[1]]
+    R12 <- sols[sols$variable == "R12" & sols$time == max(sols$time), ]$value
+    summary$wins[i] <- mean(R12 * data[[1]][[2]]$D > 1e3)
+    ci <- binom.test(summary$wins[i] * 1000, 1000, conf.level = 0.95)$conf.int
+    summary$ymin[i] <- ci[1]
+    summary$ymax[i] <- ci[2]
 }
 
 # Run the simulations (case 2)
@@ -91,12 +96,15 @@ for (i in seq_len(nrow(summary))) {
     summary$final_pop[i] <- 4 * mean(sols$value[sols$time >= 400])
 }
 
+# add error bars
 png("HGT_SSWM.png", width = 12, height = 10, units = "in", res = 300)
 # plot with one independent variable and one dependent variable
 ggplot(summary, aes(x = HGT, y = wins)) +
     geom_point(size = 3) +
+    geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2) +
     theme_light() +
     scale_x_log10() +
+    scale_y_continuous(limits = c(0,1)) +
     labs(
         title = "HGT in strong-selection weak-mutation regime",
         x = "recombination rate",
@@ -156,9 +164,9 @@ ggplot(summary, aes(x = D, y = HGT, color = wins)) +
     )
 
 # # Save the simulation results to a file
-save(data, file = "results/data4.RData")
-# # read the data file we just wrote back as data
-# load("results/data.RData")
+save(data, file = "C:/Users/s4528540/Downloads/results/data4.RData")
+# read the data file we just wrote back as data
+load("C:/Users/s4528540/Downloads/results/data4.RData")
 
 # Plot the summary statistics
 metrics_plot(summary, "R12")
