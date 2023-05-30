@@ -146,6 +146,7 @@ single_run <- function(config, x) {
         if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
+          tl.params = list(maxtau = max_step),
           deterministic = grep("depletion", names(transitions))
         )
       }
@@ -184,6 +185,7 @@ simulate <- function(
   bactericidal = TRUE, # whether drugs directly kill or limit growth
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
+  max_step = Inf, # SSA max step parameter, only used if deterministic = FALSE
   tau = 10, # frequency of bottlenecks, in hours
   dose_rep = 1, # number of doses of the same drug before switching
   dose_gap = 10, # time between doses of the same drug, in hours
