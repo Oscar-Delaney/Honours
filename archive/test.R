@@ -3,27 +3,31 @@ library(ggplot2)
 library(adaptivetau)
 
 transitions <- list(
-    s = c(y1 = +1), # stochastic
-    d = c(y2 = +1) # deterministic
+    s = c(y1 = +1) # stochastic
+    # d = c(y2 = +1) # deterministic
 )
 
 rates <- function(state, parms, t) {
     return(c(
-        s = state["y1"],
-        d = state["y2"]
+        s = state["y1"]
+        # d = state["y2"]
         )
     )
 }
 
 c <- 1e3
-state <- c * c(y1 = 1, y2 = 1)
+state <- c * c(y1 = 1) #, y2 = 1)
 sol <- as.data.frame(ssa.adaptivetau(state, transitions, rates,
-    c, tf = 10, deterministic = c(F,T)))
+    c, tf = 10,tl.params = list(epsilon = 1e-3)))
 sol$y3 <- c * exp(sol$time)
+# sol$y3 <- 1
+# for (i in seq_len(nrow(sol))[-1]) {
+#     sol$y3[i] <- sol$y3[i-1] * (1 + sol$time[i] - sol$time[i-1])
+# }
 
 ggplot(sol, aes(x = time)) +
   geom_step(aes(y = y1, color = "Stochastic")) +
-  geom_step(aes(y = y2, color = "Deterministic")) +
+#   geom_step(aes(y = y2, color = "Deterministic")) +
   geom_line(aes(y = y3, color = "exp(t)")) +
   scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
                      breaks = 10^seq(0, 20),
