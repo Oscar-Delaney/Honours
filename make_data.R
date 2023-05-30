@@ -38,38 +38,63 @@ metrics_plot <- function(summary, metric) {
 }
 
 # Create a grid of parameter combinations
-time <- 200
+time <- 1e3
 freq_range <- seq(1, 30, by = 1)
 D_range <- 10 ^ (-0.1 * freq_range)
 HGT_range <- 10 ^ seq(-20, -10, by = 0.5)
 summary <- expand.grid(HGT = HGT_range)
-summary <- expand.grid(dose_rep = 0:20)
+
+summary <- data.frame(dose_rep = 0:1)
 summary$wins <- 0
 
 # Run the simulations (case 1)
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[i]] <- simulate(
-        init = c(S = 1e7, R1=0, R2=0, R12=0),
-        N0 = 2e8,
-        k = 1e7,
-        mu = 1,
-        time = 500,
-        dose_rep = 10,
-        rep = 1000,
-        HGT = summary$HGT[i]
-        )
-
+    cycl = summary$dose_rep[i] > 0,
+    init = c(S = 1e7, R1=0, R2=0, R12=0),
+    N0 = 3e8,
+    k = 1e7,
+    mu = 1.3 * c(1, 0.8, 0.8, 0.64),
+    time = time,
+    dose_rep = summary$dose_rep[i],
+    rep = 1e1,
+    HGT = 0
+)
+print(i/nrow(summary))
 }
 
-log_plot(data[[11]][[1]][data[[1]][[1]]$rep >= 90, ], type = "all")
+
+log_plot(simulate(
+    cycl = T,
+    init = c(S = 1e10, R1=1e4, R2=0, R12=0),
+    d1 = 0,
+    d2 = 0,
+    m1 = 0,
+    m2 = 0,
+    k = 1e11,
+    alpha = 1,
+    N0 = 1e11,
+    D = 1e-2,
+    mu = 0.75 * c(1, 0.8, 0.8, 0.64),
+    phi1 = 0.4,
+    phi2 = 0.4,
+    time = 300,
+    dose_rep = 1,
+    rep = 1,
+    HGT = 0,
+    tau = 1e3
+)[[1]])
+
+log_plot(data[[2]][[1]][data[[1]][[1]]$rep >= 0, ], type = "all")
 
 # Calculate the summary statistics
 for (i in seq_len(nrow(summary))) {
     sols <- data[[i]][[1]]
     R12 <- sols[sols$variable == "R12" & sols$time == max(sols$time), ]$value
-    summary$wins[i] <- mean(R12 * data[[1]][[2]]$D > 1e3)
-    ci <- binom.test(summary$wins[i] * 1000, 1000, conf.level = 0.95)$conf.int
+    summary$wins[i] <- mean(R12 * data[[i]][[2]]$D > 1e3)
+    rep <- data[[i]][[2]]$rep
+    ci <- binom.test(summary$wins[i] * rep, rep, conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
 }
@@ -97,18 +122,18 @@ for (i in seq_len(nrow(summary))) {
 }
 
 # add error bars
-png("HGT_SSWM.png", width = 12, height = 10, units = "in", res = 300)
+png("test.png", width = 12, height = 10, units = "in", res = 300)
 # plot with one independent variable and one dependent variable
-ggplot(summary, aes(x = HGT, y = wins)) +
+ggplot(summary, aes(x = dose_rep, y = wins)) +
     geom_point(size = 3) +
-    geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2) +
+    geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
     theme_light() +
-    scale_x_log10() +
+    # scale_x_log10() +
     scale_y_continuous(limits = c(0,1)) +
     labs(
-        title = "HGT in strong-selection weak-mutation regime",
-        x = "recombination rate",
-        y = "Probability that MDR emerges in 500 hours"
+        title = "Cycling in strong-selection weak-mutation regime",
+        x = "Doses per cycle (0 = combination therapy)",
+        y = "Probability that MDR emerges in 1000 hours"
     ) +
     theme(
         plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
@@ -186,13 +211,30 @@ log_plot(simulate(
 
 
 # Weak mutation strong selection recombination is less useful
-log_plot(simulate(
-        init = c(S = 1e7, R1=0, R2=0, R12=0),
-        N0 = 2e8,
-        k = 1e7,
-        mu = 1,
-        time = 500,
-        dose_rep = 10,
-        rep = 4,
-        HGT = 1e-10
-        )[[1]])
+time <- 30
+init_S <- 1e6
+df <- data.frame(max_step = 10 ^ seq(0, -4, by = -1), run_time = NA, r_error = NA)
+
+for (i in seq_len(nrow(df))) {
+    df$run_time[i] <- system.time({
+        sol = simulate(
+            init = c(S = init_S, R1=0, R2=0, R12=0),
+            tau = 1e3,
+            mu = 1,
+            alpha = 0,
+            k = 0,
+            time = time,
+            dose_rep = 1,
+            rep = 1,
+            influx = c(A1 = 0, A2 = 0),
+            HGT = 0,
+            m1 = 0,
+            m2 = 0,
+            max_step = df$max_step[i],
+            deterministic = F
+            )[[1]]
+    })["elapsed"]
+    df$r_error[i] <- 1 - log(sol[sol$time == time & sol$variable == "S",]$value / init_S) / time
+    print(i/nrow(df))
+}
+df
