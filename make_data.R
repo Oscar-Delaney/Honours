@@ -38,55 +38,32 @@ metrics_plot <- function(summary, metric) {
 }
 
 # Create a grid of parameter combinations
-time <- 1e3
-freq_range <- seq(1, 30, by = 1)
-D_range <- 10 ^ (-0.1 * freq_range)
-HGT_range <- 10 ^ seq(-20, -10, by = 0.5)
+time <- 5e2
+# freq_range <- seq(1, 30, by = 1)
+# D_range <- 10 ^ (-0.1 * freq_range)
+HGT_range <- 10 ^ seq(-20, -10, by = 5)
 summary <- expand.grid(HGT = HGT_range)
-
-summary <- data.frame(dose_rep = 0:1)
+# summary <- data.frame(dose_rep = 0:0)
 summary$wins <- 0
 
 # Run the simulations (case 1)
 data <- list()
 for (i in seq_len(nrow(summary))) {
-    data[[i]] <- simulate(
-    cycl = summary$dose_rep[i] > 0,
-    init = c(S = 1e7, R1=0, R2=0, R12=0),
-    N0 = 3e8,
-    k = 1e7,
-    mu = 1.3 * c(1, 0.8, 0.8, 0.64),
-    time = time,
-    dose_rep = summary$dose_rep[i],
-    rep = 1e1,
-    HGT = 0
-)
-print(i/nrow(summary))
+    data[[i]] <- 
+print(i / nrow(summary))
 }
-
-
-log_plot(simulate(
-    cycl = T,
-    init = c(S = 1e10, R1=1e4, R2=0, R12=0),
-    d1 = 0,
-    d2 = 0,
-    m1 = 0,
-    m2 = 0,
-    k = 1e11,
-    alpha = 1,
-    N0 = 1e11,
-    D = 1e-2,
-    mu = 0.75 * c(1, 0.8, 0.8, 0.64),
-    phi1 = 0.4,
-    phi2 = 0.4,
-    time = 300,
-    dose_rep = 1,
-    rep = 1,
-    HGT = 0,
-    tau = 1e3
+log_plot(sol <- simulate(
+    init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0),
+    N0 = 1e12,
+    k = 1e10,
+    mu = 1.5 * c(1, 0.9, 0.9, 0.81),
+    phi1 = 2,
+    phi2 = 2,
+    time = 60,
+    rep = 10,
+    D = 1,
+    HGT = 0
 )[[1]])
-
-log_plot(data[[2]][[1]][data[[1]][[1]]$rep >= 0, ], type = "all")
 
 # Calculate the summary statistics
 for (i in seq_len(nrow(summary))) {
