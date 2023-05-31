@@ -1,7 +1,7 @@
 # Critique of Wahl papers
 source("stochastic.R")
 
-log_plot(data[[1]][[1]][data[[1]][[1]]$rep >= 0, ], type = "all")
+log_plot(data3[[11]][[1]][data1[[1]][[1]]$rep >= 990, ], type = "all")
 
 s <- 0.1
 N0 <- 3e8
@@ -9,16 +9,16 @@ time <- 100
 
 # Wahl 1 No resource constraints
 r <- 1.03
-summary <- data.frame(tau = seq(0.1, 3, by = 0.1))
-summary$D <- exp(-summary$tau)
-data <- list()
+summary <- data.frame(D = 10 ^ - seq(0.05, 4, by = 0.2))
+data1 <- list()
 for (i in seq_len(nrow(summary))) {
-    data[[i]] <- simulate(
+    D <- summary$D[i]
+    data1[[i]] <- simulate(
         seed = NULL,
         rep = 1e3,
         time = time,
-        tau = summary$tau[i],
-        D = summary$D[i],
+        tau = - log(D),
+        D = D,
         influx = c(A1 = 0, A2 = 0),
         N0 = N0,
         k = 1e-2 * N0,
@@ -26,7 +26,7 @@ for (i in seq_len(nrow(summary))) {
         m1 = 1e-9,
         m2 = 0,
         mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * summary$D[i]), R1 = 0, R2 = 0, R12 = 0)
+        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
     )
     print(i/nrow(summary))
 }
@@ -34,15 +34,17 @@ for (i in seq_len(nrow(summary))) {
 
 # Wahl 2 Constant resource concentration in dilution media
 r <- 1.1
-summary <- expand.grid(tau = seq(0.1, 3, 0.7), D = seq(0.1, 3, 0.7))
-data <- list()
+# summary <- expand.grid(tau = seq(0.1, 3, 0.7), D = seq(0.1, 3, 0.7))
+summary <- data.frame(D = 10 ^ - seq(0.05, 4, by = 0.2))
+data2 <- list()
 for (i in seq_len(nrow(summary))) {
-    data[[i]] <- simulate(
+    D <- summary$D[i]
+    data2[[i]] <- simulate(
         seed = NULL,
-        rep = 1e1,
+        rep = 1e3,
         time = time,
-        tau = summary$tau[i],
-        D = summary$D[i],
+        tau = - log(D),
+        D = D,
         influx = c(A1 = 0, A2 = 0),
         N0 = N0,
         k = 1e-2 * N0,
@@ -50,33 +52,33 @@ for (i in seq_len(nrow(summary))) {
         m1 = 1e-9,
         m2 = 0,
         mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * summary$D[i]), R1 = 0, R2 = 0, R12 = 0)
+        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
     )
     print(i/nrow(summary))
 }
 
-log_plot(data[[10]][[1]][data[[1]][[1]]$rep >= 8, ], type = "all")
-
 # Wahl 3 Constant total resource supply per time
 r <- 1.1
-summary <- expand.grid(tau = seq(0.1, 2, 0.1), D = seq(0.1, 0.95, 0.05))
+# summary <- expand.grid(tau = seq(0.1, 2, 0.1), D = seq(0.1, 0.95, 0.05))
+summary <- data.frame(D = 10 ^ - seq(0.05, 4, by = 0.2))
 # summary$D <- exp(-summary$tau)
-data <- list()
+data3 <- list()
 for (i in seq_len(nrow(summary))) {
-    data[[i]] <- simulate(
+    D <- summary$D[i]
+    data3[[i]] <- simulate(
         seed = NULL,
-        rep = 3e1,
+        rep = 1e3,
         time = time,
-        tau = summary$tau[i],
-        D = summary$D[i],
+        tau = - log(D),
+        D = D,
         influx = c(A1 = 0, A2 = 0),
-        N0 = N0 * summary$tau[i] / (1 - summary$D[i]),
+        N0 = N0 * log(D) / (D - 1),
         k = 1e-2 * N0,
         alpha = 1,
         m1 = 1e-9,
         m2 = 0,
         mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * summary$D[i]), R1 = 0, R2 = 0, R12 = 0)
+        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
     )
     print(i/nrow(summary))
 }
@@ -85,17 +87,17 @@ for (i in seq_len(nrow(summary))) {
 summary$wins <- 0
 for (i in seq_len(nrow(summary))) {
     # count the number of runs on which R1 was at least 1e-5 of S at the end
-    end <- data[[i]][[1]][data[[i]][[1]]$time == time,]
+    end <- data3[[i]][[1]][data3[[i]][[1]]$time == time, ]
     R1 <- end[end$variable == "R1",]$value
     S <- end[end$variable == "S",]$value
     summary$wins[i] <- mean(ifelse(S==0, R1, R1 / S) > 1e3 / N0)
-    rep = data[[i]][[2]]$rep
+    rep <- data3[[i]][[2]]$rep
     ci <- binom.test(summary$wins[i] * rep, rep, conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
 }
 
-png("wahl3_1.png", width = 12, height = 10, units = "in", res = 300)
+png("wahl3.png", width = 12, height = 10, units = "in", res = 300)
 ggplot(summary, aes(x = D, y = wins)) +
     geom_point(size = 3) +
     geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
@@ -113,6 +115,53 @@ ggplot(summary, aes(x = D, y = wins)) +
         axis.text = element_text(size = 25)
     )
 dev.off()
+
+sols 
+
+summary$N_plus <- 0
+summary$N_minus <- 0
+for (i in seq_len(nrow(summary))) {
+    # Find the time at which the final bottleneck occurred
+    # sols <- data2[[i]][[1]]
+    sols <- sols[sols$variable == "N",]
+    last_bneck <- sols %>%
+        filter(rep == 1) %>%
+        filter(value > lag(value)) %>%
+        slice_tail(n = 1) %>%
+        pull(time)
+    dt <- 0.1
+    summary$N_plus[i] <- max(sols[near(sols$time, last_bneck - dt), ]$value)
+    summary$N_minus[i] <- min(sols[near(sols$time, last_bneck - dt), ]$value)
+}
+
+
+# png("wahl_nutrients2.png", width = 12, height = 10, units = "in", res = 300)
+ggplot(summary) +
+    geom_point(aes(x = D, y = N_minus, color = "Before"), size = 3) +
+    geom_point(aes(x = D, y = N_plus, color = "After"), size = 3) +
+    theme_light() +
+    scale_x_log10() +
+    # scale_y_log10() +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+      breaks = 10^seq(0, 20),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    scale_color_manual(values = c("Before" = "blue", "After" = "red"), 
+                       name = "Nutrient pulse: ") +
+    # scale_y_continuous(limits = c(0,1)) +
+    labs(
+        title = "Nutrient use (constant media resource conc)",
+        x = "D",
+        y = "Nutrient concentration"
+    ) +
+    theme(
+        plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom"
+    )
+# dev.off()
 
 ggplot(summary, aes(x = D, y = tau)) +
     geom_tile(aes(fill = wins)) +
