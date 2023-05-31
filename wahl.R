@@ -116,13 +116,34 @@ ggplot(summary, aes(x = D, y = wins)) +
     )
 dev.off()
 
-sols 
+data5 <- list()
+r <- 1.2
+for (i in seq_len(nrow(summary))) {
+    D <- summary$D[i]
+    data5[[i]] <- simulate(
+        seed = NULL,
+        rep = 1e0,
+        dt = 0.01,
+        time = time,
+        tau = - log(D),
+        D = D,
+        influx = c(A1 = 0, A2 = 0),
+        N0 = N0,
+        k = 1e-1 * N0,
+        alpha = 1,
+        m1 = 1e-9,
+        m2 = 0,
+        mu = c(S = r, R1 = r * (1 + s)),
+        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
+    )
+    print(i/nrow(summary))
+}
 
 summary$N_plus <- 0
 summary$N_minus <- 0
 for (i in seq_len(nrow(summary))) {
     # Find the time at which the final bottleneck occurred
-    # sols <- data2[[i]][[1]]
+    sols <- data5[[i]][[1]]
     sols <- sols[sols$variable == "N",]
     last_bneck <- sols %>%
         filter(rep == 1) %>%
@@ -130,12 +151,11 @@ for (i in seq_len(nrow(summary))) {
         slice_tail(n = 1) %>%
         pull(time)
     dt <- 0.1
-    summary$N_plus[i] <- max(sols[near(sols$time, last_bneck - dt), ]$value)
-    summary$N_minus[i] <- min(sols[near(sols$time, last_bneck - dt), ]$value)
+    summary$N_plus[i] <- mean(sols[near(sols$time, last_bneck), ]$value)
+    summary$N_minus[i] <- mean(sols[near(sols$time, last_bneck - dt), ]$value)
 }
 
-
-# png("wahl_nutrients2.png", width = 12, height = 10, units = "in", res = 300)
+png("wahl_nutrients2_v2.png", width = 12, height = 10, units = "in", res = 300)
 ggplot(summary) +
     geom_point(aes(x = D, y = N_minus, color = "Before"), size = 3) +
     geom_point(aes(x = D, y = N_plus, color = "After"), size = 3) +
@@ -143,13 +163,14 @@ ggplot(summary) +
     scale_x_log10() +
     # scale_y_log10() +
     scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-      breaks = 10^seq(0, 20),
+      breaks = 10^seq(0, 20, by = 1),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     scale_color_manual(values = c("Before" = "blue", "After" = "red"), 
                        name = "Nutrient pulse: ") +
     # scale_y_continuous(limits = c(0,1)) +
     labs(
         title = "Nutrient use (constant media resource conc)",
+        # title = "Nutrient use (constant resource flux)",
         x = "D",
         y = "Nutrient concentration"
     ) +
@@ -161,7 +182,33 @@ ggplot(summary) +
         legend.text = element_text(size = 20),
         legend.position = "bottom"
     )
-# dev.off()
+dev.off()
+
+filtered <- data5[[4]][[1]] %>%
+    filter(variable %in% c("N","S")) %>%
+    filter(time > 0)
+
+ggplot() +
+    geom_point(data = filtered, aes(x = time, y = value, color = variable)) +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+        breaks = 10^seq(0, 20),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    labs(
+        title = "Bacterial growth over time",
+        x = "Time (hours)",
+        y = "Population Size",
+        color = "Strain",
+        fill = "Strain"
+    ) +
+    theme_light() +
+    theme(
+        legend.position = "bottom",
+        plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20)
+    )
 
 ggplot(summary, aes(x = D, y = tau)) +
     geom_tile(aes(fill = wins)) +
