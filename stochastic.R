@@ -36,7 +36,7 @@ monod <- function(N, mu, k) {
   return(mu * ifelse(k == 0, 1, 1 / (1 + k / N)))
 }
 
-# a function that reduces all populations by a factor of D, in expectation
+# implement a population bottleneck and/or drug dosing
 event <- function(state, config) {
   with(config, {
     t <- state["time"] # extract the time
@@ -85,7 +85,7 @@ rates <- function(state, config, t) {
     deaths <- death(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta)
     # Calculate replication rates
     replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) *
-      (1 - (1 - bactericidal) * deaths/(phi1 + phi2))
+      (1 - (1 - bactericidal) * deaths / (phi1 + phi2))
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
       S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
