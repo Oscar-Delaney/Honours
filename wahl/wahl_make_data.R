@@ -1,5 +1,5 @@
 # Critique of Wahl papers
-source("stochastic.R")
+source("wahl_code.R")
 
 log_plot(data3[[11]][[1]][data1[[1]][[1]]$rep >= 990, ], type = "all")
 
@@ -7,25 +7,6 @@ s <- 0.1
 N0 <- 3e8
 time <- 100
 
-simulate(
-        seed = NULL,
-        rep = 1,
-        deterministic = T,
-        max_step = 1e-4,
-        dose_gap = 1e3,
-        time = 100,
-        tau = log(10),
-        D = 0.1,
-        influx = c(A1 = 0, A2 = 0),
-        N0 = 3e8,
-        k = 3e6,
-        alpha = 0,
-        m1 = 1e-9,
-        m2 = 0,
-        mu = c(S = 1.03, R1 = 1.133),
-        init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0)
-    )[[1]]$value[7001]
-print(c(sol$valu))
 # Wahl 1 No resource constraints
 r <- 1.03
 summary <- data.frame(D = 10 ^ - seq(0.05, 4, by = 0.2))
@@ -34,18 +15,15 @@ for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
     data1[[i]] <- simulate(
         seed = NULL,
-        rep = 1e3,
+        rep = 1e0,
         time = time,
         tau = - log(D),
         D = D,
-        influx = c(A1 = 0, A2 = 0),
         N0 = N0,
         k = 1e-2 * N0,
         alpha = 0,
-        m1 = 1e-9,
-        m2 = 0,
-        mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
+        mu = c(W = r, M = r * (1 + s)),
+        init = c(W = round(N0 * D), M = 0)
     )
     print(i/nrow(summary))
 }
@@ -64,14 +42,11 @@ for (i in seq_len(nrow(summary))) {
         time = time,
         tau = - log(D),
         D = D,
-        influx = c(A1 = 0, A2 = 0),
         N0 = N0,
         k = 1e-2 * N0,
         alpha = 1,
-        m1 = 1e-9,
-        m2 = 0,
-        mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
+        mu = c(W = r, M = r * (1 + s)),
+        init = c(W = round(N0 * D), M = 0)
     )
     print(i/nrow(summary))
 }
@@ -90,14 +65,11 @@ for (i in seq_len(nrow(summary))) {
         time = time,
         tau = - log(D),
         D = D,
-        influx = c(A1 = 0, A2 = 0),
         N0 = N0 * log(D) / (D - 1),
         k = 1e-2 * N0,
         alpha = 1,
-        m1 = 1e-9,
-        m2 = 0,
-        mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
+        mu = c(W = r, M = r * (1 + s)),
+        init = c(W = round(N0 * D), M = 0)
     )
     print(i/nrow(summary))
 }
@@ -105,11 +77,11 @@ for (i in seq_len(nrow(summary))) {
 # calculate summary statistics
 summary$wins <- 0
 for (i in seq_len(nrow(summary))) {
-    # count the number of runs on which R1 was at least 1e-5 of S at the end
+    # count the number of runs on which M was at least 1e-5 of W at the end
     end <- data3[[i]][[1]][data3[[i]][[1]]$time == time, ]
-    R1 <- end[end$variable == "R1",]$value
-    S <- end[end$variable == "S",]$value
-    summary$wins[i] <- mean(ifelse(S==0, R1, R1 / S) > 1e3 / N0)
+    M <- end[end$variable == "M",]$value
+    W <- end[end$variable == "W",]$value
+    summary$wins[i] <- mean(ifelse(W==0, M, M / W) > 1e3 / N0)
     rep <- data3[[i]][[2]]$rep
     ci <- binom.test(summary$wins[i] * rep, rep, conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
@@ -152,8 +124,8 @@ for (i in seq_len(nrow(summary))) {
         alpha = 1,
         m1 = 1e-9,
         m2 = 0,
-        mu = c(S = r, R1 = r * (1 + s)),
-        init = c(S = round(N0 * D), R1 = 0, R2 = 0, R12 = 0)
+        mu = c(W = r, M = r * (1 + s)),
+        init = c(W = round(N0 * D), M = 0, R2 = 0, R12 = 0)
     )
     print(i/nrow(summary))
 }
@@ -204,7 +176,7 @@ ggplot(summary) +
 dev.off()
 
 filtered <- data5[[4]][[1]] %>%
-    filter(variable %in% c("N","S")) %>%
+    filter(variable %in% c("N","W")) %>%
     filter(time > 0)
 
 ggplot() +
@@ -234,7 +206,7 @@ ggplot(summary, aes(x = D, y = tau)) +
     scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1)) +
     labs(x = "D", y = "tau", fill = "proportion",
             title = "Optimal Dilution Ratio (constant resource flux)",
-            subtitle = "proportion of runs where R1 becomes established") +
+            subtitle = "proportion of runs where M becomes established") +
     theme_minimal() +
     theme(
         plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
