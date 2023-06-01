@@ -7,6 +7,25 @@ s <- 0.1
 N0 <- 3e8
 time <- 100
 
+simulate(
+        seed = NULL,
+        rep = 1,
+        deterministic = T,
+        max_step = 1e-4,
+        dose_gap = 1e3,
+        time = 100,
+        tau = log(10),
+        D = 0.1,
+        influx = c(A1 = 0, A2 = 0),
+        N0 = 3e8,
+        k = 3e6,
+        alpha = 0,
+        m1 = 1e-9,
+        m2 = 0,
+        mu = c(S = 1.03, R1 = 1.133),
+        init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0)
+    )[[1]]$value[7001]
+print(c(sol$valu))
 # Wahl 1 No resource constraints
 r <- 1.03
 summary <- data.frame(D = 10 ^ - seq(0.05, 4, by = 0.2))
