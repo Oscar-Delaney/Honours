@@ -118,13 +118,13 @@ simulate <- function(
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
   max_step = Inf, # SSA max step parameter, only used if deterministic = FALSE
-  tau = 10, # frequency of bottlenecks, in hours
+  tau = 3, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
-  N0 = 1e15, # initial nutrient concentration
+  N0 = 1e9, # initial nutrient concentration
   m1 = 1e-9, # rate of mutations conferring resistance to drug 1
-  init = c(W = 1e12, M = 0), # initial population sizes
-  mu = 0.88 * c(W = 1, M = 1.1), # maximum growth rate
-  k = 1e14 * c(W = 1, M = 1), # [N] at half-max growth rate
+  init = c(W = 1e8, M = 0), # initial population sizes
+  mu = c(W = 1, M = 1.1), # maximum growth rate
+  k = 1e8 * c(W = 1, M = 1), # [N] at half-max growth rate
   alpha = c(W = 1, M = 1) # nutrients used per replication
   ) {
   # Define the parameters of the model
@@ -216,4 +216,4 @@ log_plot <- function(solutions, type = "all") {
 }
 
 system.time(log_plot(simulate()[[1]], type = "all"))
-# simulate(deterministic = TRUE)[[1]]$value[7001:7007]
+# simulate(deterministic = TRUE)[[1]]$value[3001:3003]
