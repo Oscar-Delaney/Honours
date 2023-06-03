@@ -23,6 +23,13 @@ fix_rate <- function(D, r, s, N, mu) {
     return(theta * (1 - phi) / tau)
 }
 
+# new fix rate
+fix_rate2 <- function(D, r, s, N, mu) {
+    return(ifelse(D == 1, s / (s + 1), 
+    (-N * mu * r * (1 - D ^ -s) ^ 2) /
+    (s * log(D) * (D ^ (s - 1) - D ^ (2 * s)))))
+}
+
 # evaluate a set of simulation results
 metric <- function(summary, data, threshold = 1e2) {
     for (i in seq_len(nrow(summary))) {
