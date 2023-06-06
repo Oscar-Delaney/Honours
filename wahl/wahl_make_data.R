@@ -43,6 +43,33 @@ theta <- function(D, s) {
     return(D * (D ^ -s - 1) / s)
 }
 
+w <- data[[i]][[1]] %>%
+    group_by(rep) %>%
+    filter(time == max(time), variable == "W") %>%
+    summarise(w_final_value = value, .groups = "keep")
+
+proportions <- data[[i]][[1]] %>%
+    group_by(rep, variable) %>%
+    filter(time == max(time), !(variable %in% c("W", "N"))) %>%
+    summarise(final_value = value / w$w_final_value, .groups = "keep")
+
+final_counts <- data[[i]][[1]] %>%
+    group_by(rep, variable) %>%
+    filter(time == max(time), !(variable %in% c("W", "N"))) %>%
+    summarise(final_value = value) %>%
+    ungroup()
+
+fixed <- final_counts %>%
+    group_by(rep) %>%
+    summarise(n = sum(final_value > 1e2))
+
+fixation_rate <- fixed$n / data[[i]][[2]]$time
+
+rate <- mean(fixation_rate)
+se <- sd(fixation_rate) / sqrt(length(fixation_rate))
+ci <- rate + se * qnorm(c(0.025, 0.975))
+
+
 # evaluate a set of simulation results
 metric <- function(summary, data, threshold = 1e2) {
     for (i in seq_len(nrow(summary))) {
@@ -88,13 +115,13 @@ metric <- function(summary, data, threshold = 1e2) {
 summary <- metric(summary, data)
 summary$theory <- theory(summary$D, r, s, summary$N0, m1)
 summary
-log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 6 & data[[1]][[1]]$time < 100, ])
+log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 1 & data[[1]][[1]]$time < 300, ])
 sols <- data[[4]][[1]]
 sols2 <- sols[sols$variable == "W" & sols$time <= 0.24 & sols$rep == 1,]
 print(sols2, n=50)
 s <- 0.1
 N0 <- 1e8
-time <- 100
+time <- 300
 m1 <- 1e-9
 
 # Wahl 1 No resource constraints
@@ -107,9 +134,9 @@ for (i in seq_len(nrow(summary))) {
     # m1 <- summary$m1[i]
     data[[i]] <- simulate(
         seed = NULL,
-        rep = 1e3,
+        rep = 1e2,
         time = time,
-        dt = 1e-2,
+        dt = 1e0,
         tau = - log(D),
         D = D,
         N0 = N0,
@@ -118,7 +145,7 @@ for (i in seq_len(nrow(summary))) {
         mu = c(W = r, M = r * (1 + s)),
         init_W = round(N0 * D),
         m1 = 1e-9,
-        num_mutants = 10
+        num_mutants = 1e2
     )
     print(i / nrow(summary))
 }
@@ -185,7 +212,7 @@ for (i in seq_len(nrow(summary))) {
     # summary$ci_upper[i] <- ci[2]
 }
 
-summary$theory <- N0 * m1 * r * summary$D * (1 - phi(summary$D, s))
+summary$theory_approx <- N0 * m1 * r * summary$D * (1 - phi(summary$D, s))
 summary$theory_old <- fix_rate(summary$D, r, s, N0, m1)
 summary$theory_full <- theory(summary$D, r, s, N0, m1)
 summary[c("D", "theory", "theory2")]
