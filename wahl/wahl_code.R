@@ -58,12 +58,14 @@ rates <- function(state, config, t) {
     # Calculate replication rates
     replication_rates <- state[names] * monod(N, mu, k)
     # find which mutant category we should be filling
-    to_mutate <- update_count(state, count)
+    to_mutate <- min(which(state == 0), num_mutants + 2) - 1
     # chance of a replication in row i resulting in a strain j cell
     mutation <- diag(num_mutants + 1)
     if (to_mutate <= num_mutants) {
       mutation[1, to_mutate + 1] <- m1
       mutation[1, 1] <- 1 - m1
+    } else {
+      print("Out of mutant spots! :(")
     }
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
@@ -109,7 +111,6 @@ single_run <- function(config, x) {
           tl.params = list(maxtau = max_step),
           deterministic = grep("depletion", names(transitions))
         )
-        tail(new)
       }
       # Make the time column reflect the overall time accurately
       new[, "time"] <- new[, "time"] + t
@@ -117,9 +118,8 @@ single_run <- function(config, x) {
       new[1, "time"] <- new[1, "time"] * (1 + 1e-6)
       # Update the solution
       solution <- if (t == 0) new else rbind(solution, new)
-      tail(solution)
       # Run the bottleneck and update the state
-      config$count <- update_count(new[nrow(new), -1], config$count)
+      # config$count <- update_count(new[nrow(new), -1], config$count)
       state <- bottleneck(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
@@ -155,7 +155,7 @@ simulate <- function(
   ) {
   # Define the parameters of the model
   names <- c("W", paste0("M", 1:num_mutants))
-  count <- 1
+  # count <- 0 # number of mutants that have arisen
   init <- setNames(c(init_W, rep(init_M, num_mutants), N0), c(names, "N"))
   mu <- setNames(c(mu["W"], rep(mu["M"], num_mutants)), names)
   config <- as.list(environment())
@@ -245,5 +245,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-system.time(log_plot(simulate(seed = NULL, num_mutants = 10)[[1]], type = "all"))
+system.time(simulate(num_mutants = 100)[[1]])
 # simulate(deterministic = TRUE)[[1]]$value[3001:3003]
