@@ -13,44 +13,65 @@ monod <- function(N, mu, k) {
 # a function that reduces all populations by a factor of D, in expectation
 bottleneck <- function(state, config) {
   with(config, {
-    pops <- state[names(init)] # extract just the cell counts
+    pops <- state[names] # extract just the cell counts
     N <- state["N"] # extract the nutrient concentration
     if (deterministic) {
         pops <- pops * D
     } else {
-        pops <- setNames(rbinom(length(pops), pops, D), names(pops))
+        pops <- setNames(rbinom(length(pops), pops, D), names)
     }
     N <- N * D + N0 * (1 - D)
     return(c(pops, N))
   })
 }
 
+# Update the count of which mutant we are mutating
+update_count <- function(state, count) {
+  while (count < length(state)) {
+    if (state[count + 1] != 0) {
+      count <- count + 1
+    } else {
+      break
+    }
+  }
+  return(count)
+}
+
 # a function outputting the transitions that can occur in the model
-make_transitions <- function() {
-  return(list(
-  W_growth = c(W = +1), # wild type growth
-  M_growth = c(M = +1), # mutant growth
-  N_depletion = c(N = -1) # nutrient depletion
-))
+make_transitions <- function(num_mutants) {
+    # Create the initial list
+    rate_list <- list(
+      W_growth = c(W = +1) # wild type growth
+    )
+    # Add the growth rates for each mutant
+    for (i in 1:num_mutants) {
+      rate_list[[paste0("M", i, "_growth")]] <- setNames(c(+1), paste0("M", i))
+    }
+    # Add the nutrient depletion rate
+    rate_list[["N_depletion"]] <- setNames(c(-1), "N")
+  return(rate_list)
 }
 
 # compute the rate at which each transition occurs
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- c(W, M) * monod(N, mu, k)
+    replication_rates <- state[names] * monod(N, mu, k)
+    # find which mutant category we should be filling
+    to_mutate <- update_count(state, count)
     # chance of a replication in row i resulting in a strain j cell
-    mutation <- matrix(c(
-      W  = c((1 - m1), m1),
-      M = c(0, 1)
-      ), nrow = 2, byrow = TRUE)
+    mutation <- diag(num_mutants + 1)
+    if (to_mutate <= num_mutants) {
+      mutation[1, to_mutate + 1] <- m1
+      mutation[1, 1] <- 1 - m1
+    }
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate nutrient depletion rate
     N_depletion <- sum(replication_rates * alpha)
     # Combine all rates and return
     rate_list <- c(growth_rates, N_depletion)
-    return(setNames(rate_list, names(make_transitions())))
+    return(setNames(rate_list, c(names, "N")))
   })
 }
 
@@ -69,9 +90,9 @@ ode_rates <- function(t, state, config) {
 single_run <- function(config, x) {
   with(config, {
     # Define the transitions of the model
-    transitions <- make_transitions()
+    transitions <- make_transitions(num_mutants)
     # Initialise the state variables
-    state <- c(init, N = N0)
+    state <- init
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     bottlenecks <- unique(round(c(seq(0, time, tau), time), 10))
     for (t in bottlenecks[-length(bottlenecks)]) {
@@ -88,6 +109,7 @@ single_run <- function(config, x) {
           tl.params = list(maxtau = max_step),
           deterministic = grep("depletion", names(transitions))
         )
+        tail(new)
       }
       # Make the time column reflect the overall time accurately
       new[, "time"] <- new[, "time"] + t
@@ -95,7 +117,9 @@ single_run <- function(config, x) {
       new[1, "time"] <- new[1, "time"] * (1 + 1e-6)
       # Update the solution
       solution <- if (t == 0) new else rbind(solution, new)
-      # Run the bottleneck and/or dose and update the state
+      tail(solution)
+      # Run the bottleneck and update the state
+      config$count <- update_count(new[nrow(new), -1], config$count)
       state <- bottleneck(new[nrow(new), ], config)
     }
     # Interpolate the solution to the common time grid
@@ -122,12 +146,18 @@ simulate <- function(
   D = 0.1, # dilution ratio at bottlenecks
   N0 = 1e9, # initial nutrient concentration
   m1 = 1e-9, # rate of mutations conferring resistance to drug 1
-  init = c(W = 1e8, M = 0), # initial population sizes
+  init_W = 1e8, # initial wild type population size
+  init_M = 0, # initial mutant population sizes
+  num_mutants = 1, # number of mutants
   mu = c(W = 1, M = 1.1), # maximum growth rate
-  k = 1e8 * c(W = 1, M = 1), # [N] at half-max growth rate
-  alpha = c(W = 1, M = 1) # nutrients used per replication
+  k = 1e8, # [N] at half-max growth rate
+  alpha = 1 # nutrients used per replication
   ) {
   # Define the parameters of the model
+  names <- c("W", paste0("M", 1:num_mutants))
+  count <- 1
+  init <- setNames(c(init_W, rep(init_M, num_mutants), N0), c(names, "N"))
+  mu <- setNames(c(mu["W"], rep(mu["M"], num_mutants)), names)
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
@@ -172,11 +202,11 @@ log_plot <- function(solutions, type = "all") {
     stop("type must be 'all', 'median' or 'mean'")
   }
   filtered <- summary %>%
-    filter(variable %in% c("W", "M")) %>%
-    mutate(variable = factor(variable, levels = c("W", "M"))) %>%
+    filter(!(variable %in% c("N"))) %>%
+    mutate(variable = factor(variable, levels = unique(variable))) %>%
     arrange(variable)
   # Initialise the colours
-  colors <- c("black", "navy")
+  colors <- c("black", hcl.colors(length(levels(filtered$variable)) - 1, "Dark 2"))
   peak <- max(solutions$value, na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
@@ -215,5 +245,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-system.time(log_plot(simulate()[[1]], type = "all"))
+system.time(log_plot(simulate(seed = NULL, num_mutants = 10)[[1]], type = "all"))
 # simulate(deterministic = TRUE)[[1]]$value[3001:3003]
