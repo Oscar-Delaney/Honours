@@ -143,7 +143,7 @@ single_run <- function(config, x) {
         times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
         new <- ode(state, times, ode_rates, config)
       } else {
-        if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
+        if (is.numeric(seed)) set.seed(seed + t) # set the seed for reproducibility
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
           tl.params = list(maxtau = max_step),
@@ -324,5 +324,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-system.time(log_plot(simulate()[[1]], type = "all"))
+system.time(log_plot(simulate(init = c(S = 1e8, R1=0, R2=0, R12=0), seed = 13, N0 = 1e9, k=1, time = 100, influx = c(A1=0,A2=0))[[1]], type = "all"))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]

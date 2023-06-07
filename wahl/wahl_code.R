@@ -105,7 +105,7 @@ single_run <- function(config, x) {
         times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
         new <- ode(state, times, ode_rates, config)
       } else {
-        if (is.numeric(seed)) set.seed(seed) # set the seed for reproducibility
+        if (is.numeric(seed)) set.seed(seed + t) # set the seed for reproducibility
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
           tl.params = list(maxtau = max_step),
