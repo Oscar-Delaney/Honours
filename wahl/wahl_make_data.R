@@ -96,10 +96,12 @@ for (i in seq_len(nrow(summary))) {
 }
 
 # Wahl 2 Constant resource concentration in dilution media
+s <- 0.1
+time <- 100
 r <- 1.1
 N0 <- 1e9
 k_ratio <- 1e-2
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.6), tau = 24 * 2 ^ - seq(0, 3, by = 1))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 7, by = 1))
 summary$m1 <- summary$D ^ - 0.5 * 1e-9
 data2 <- list()
 for (i in seq_len(nrow(summary))) {
@@ -109,9 +111,9 @@ for (i in seq_len(nrow(summary))) {
     k <- k_ratio * N0
     data2[[i]] <- simulate(
         seed = NULL,
-        rep = 1e1,
+        rep = 1e2,
         time = time,
-        dt = 1e-3,
+        dt = 1e-1,
         tau = tau,
         D = D,
         N0 = N0,
@@ -147,9 +149,9 @@ for (i in seq_len(nrow(summary))) {
 }
 
 summary <- metric(summary, data2)
-summary$k_ratio <- factor(round(summary$k_ratio, 2))
+
 # png("images/test.png", width = 12, height = 10, units = "in", res = 300)
-ggplot(summary, aes(x = D, y = rate, group = k_ratio, color = k_ratio)) +
+ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
     geom_line() +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
@@ -174,104 +176,15 @@ ggplot(summary, aes(x = D, y = rate, group = k_ratio, color = k_ratio)) +
         legend.position = "bottom"
     )
 
-ggplot(summary, aes(x = D, y = wins)) +
-    geom_point(size = 3) +
-    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
-    geom_line(aes(y = 1 - phi, color = "theory")) +
-    theme_light() +
+ggplot(summary, aes(x = D, y = tau / 24)) +
+    geom_tile(aes(fill = log10(rate))) +
     scale_x_log10() +
-    # scale_y_log10() +
-    scale_y_continuous(limits = c(0,1)) +
-    scale_color_manual(values = c("theory" = "red")) +
-    labs(
-        title = "Optimal Dilution Ratio (resource unconstrained)",
-        x = "D",
-        y = "1 - phi: probability of a single mutant at t = 0 eventually fixing",
-        color = NULL
-    ) +
-    theme(
-        plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
-        axis.title = element_text(size = 25, face = "bold"),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom"
-    )
-# dev.off()
-
-data5 <- list()
-r <- 1.2
-for (i in seq_len(nrow(summary))) {
-    D <- summary$D[i]
-    data5[[i]] <- simulate(
-        seed = NULL,
-        rep = 1e0,
-        dt = 0.01,
-        time = time,
-        tau = - log(D),
-        D = D,
-        influx = c(A1 = 0, A2 = 0),
-        N0 = N0,
-        k = 1e-1 * N0,
-        alpha = 1,
-        m1 = 1e-9,
-        m2 = 0,
-        mu = c(W = r, M = r * (1 + s)),
-        init = c(W = round(N0 * D), M = 0, R2 = 0, R12 = 0)
-    )
-    print(i/nrow(summary))
-}
-
-summary$N_plus <- 0
-summary$N_minus <- 0
-for (i in seq_len(nrow(summary))) {
-    # Find the time at which the final bottleneck occurred
-    sols <- data2[[i]][[1]]
-    sols <- sols[sols$variable == "N", ]
-    last_bneck <- sols %>%
-        filter(rep == 1) %>%
-        filter(value > lag(value)) %>%
-        slice_tail(n = 1) %>%
-        pull(time)
-    dt <- 0.1
-    summary$N_plus[i] <- mean(sols[near(sols$time, last_bneck), ]$value)
-    summary$N_minus[i] <- mean(sols[near(sols$time, last_bneck - dt), ]$value)
-}
-
-ggplot(summary[summary$k_ratio == 0.1,]) +
-    geom_point(aes(x = D, y = N_minus, color = "Before", shape = k_ratio), size = 3) +
-    geom_point(aes(x = D, y = N_plus, color = "After", shape = k_ratio), size = 3) +
-    theme_light() +
-    scale_x_log10() +
-    # scale_y_log10() +
-    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-      breaks = 10^seq(0, 20, by = 1),
-      labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    scale_color_manual(values = c("Before" = "blue", "After" = "red"), 
-                       name = "Nutrient pulse: ") +
-    # scale_y_continuous(limits = c(0,1)) +
-    labs(
-        title = "Nutrient use (constant media resource conc)",
-        # title = "Nutrient use (constant resource flux)",
-        x = "D",
-        y = "Nutrient concentration"
-    ) +
-    theme(
-        plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
-        axis.title = element_text(size = 25, face = "bold"),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom"
-    )
-dev.off()
-
-ggplot(summary, aes(x = D, y = tau)) +
-    geom_tile(aes(fill = wins)) +
-    scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1)) +
-    labs(x = "D", y = "tau", fill = "proportion",
+    # scale the y axis on a log2 scale
+    scale_y_continuous(trans = "log2") +
+    scale_fill_gradient(low = "white", high = "blue") +
+    labs(x = "D", y = "tau (days)", fill = "fixation rate",
             title = "Optimal Dilution Ratio (constant resource flux)",
-            subtitle = "proportion of runs where M becomes established") +
+            subtitle = "fixation rate (loci per hour per (mutations per generation))") +
     theme_minimal() +
     theme(
         plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
