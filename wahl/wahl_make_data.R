@@ -1,27 +1,6 @@
 # Critique of Wahl papers
 source("wahl/wahl_code.R")
-library(survival)
 library(hypergeo)
-
-# calculate the theoretical solution
-solve_phi <- Vectorize(
-    function(D, s) {
-        # Define the function whose root we want to find
-        f <- function(phi) {
-            return(phi - (D * phi + (1 - D)) ^ (D ^ -(1 + s)))
-        }
-        # Use uniroot to find the root
-        phi <- uniroot(f, lower = 0, upper = 1-1e-10)
-        return(phi$root)
-    }
-)
-
-# theoretical rate at which beneficial mutations fix
-fix_rate <- function(D, r, s, N, mu) {
-    return(ifelse(D == 1, s / (s + 1), 
-    (-N * mu * r * (D ^ -s - 1) ^ 2) /
-    (s * log(D) * (D ^ -(s + 1) - 1))))
-}
 
 # Hypergeometric function
 hyper <- function(s, z) {
@@ -29,104 +8,71 @@ hyper <- function(s, z) {
 }
 
 # theoretical rate function
-theory <- function(D, r, s, N, mu) {
-    return(-r * N * mu / log(D) * (hyper(s,(1 - D) / (D * (D ^ s - 1))) -
+theory <- function(D, r, s) {
+    return(-r / log(D) * (hyper(s,(1 - D) / (D * (D ^ s - 1))) -
         D * hyper(s, (1 - D) * (D ^ s) /  (D ^ s - 1))))
 }
-
 
 phi <- function(D, s) {
     return(ifelse(D == 1, 1 / (1 + s), (1 - D) / (D ^ -s - D)))
 }
 
-theta <- function(D, s) {
-    return(D * (D ^ -s - 1) / s)
-}
-
-w <- data[[i]][[1]] %>%
-    group_by(rep) %>%
-    filter(time == max(time), variable == "W") %>%
-    summarise(w_final_value = value, .groups = "keep")
-
-proportions <- data[[i]][[1]] %>%
-    group_by(rep, variable) %>%
-    filter(time == max(time), !(variable %in% c("W", "N"))) %>%
-    summarise(final_value = value / w$w_final_value, .groups = "keep")
-
-final_counts <- data[[i]][[1]] %>%
-    group_by(rep, variable) %>%
-    filter(time == max(time), !(variable %in% c("W", "N"))) %>%
-    summarise(final_value = value) %>%
-    ungroup()
-
-fixed <- final_counts %>%
-    group_by(rep) %>%
-    summarise(n = sum(final_value > 1e2))
-
-fixation_rate <- fixed$n / data[[i]][[2]]$time
-
-rate <- mean(fixation_rate)
-se <- sd(fixation_rate) / sqrt(length(fixation_rate))
-ci <- rate + se * qnorm(c(0.025, 0.975))
-
-
 # evaluate a set of simulation results
-metric <- function(summary, data, threshold = 1e2) {
+metric <- function(summary, data) {
     for (i in seq_len(nrow(summary))) {
-        # define the minimum population size for a mutant to be ~fixed
-        c <- threshold / data[[i]][[2]]$D
-        dt <- data[[i]][[2]]$dt # time step
-        max_pop <- data[[i]][[2]]$init["W"] / data[[i]][[2]]$D
-        mut_rate <- data[[i]][[2]]$m1
-        mut_per_gen <- 1 # mut_rate * max_pop
-        # find the time at which the mutant first appears en route to fixation
-        survival <- data[[i]][[1]] %>%
+        # extract the mutation rate and population size
+        m1 <- data[[i]][[2]]$m1
+        N0 <- data[[i]][[2]]$N0
+        # find the time just after the last bottleneck
+        endpoint <- data[[i]][[1]] %>%
+            filter(variable == "W", rep == 1) %>%
+            filter(value - lag(value) < 0) %>%
+            tail(1) %>%
+            pull(time)
+        # find the likelihood of a new mutation at t=0 going extinct 
+        current_phi <- phi(data[[i]][[2]]$D, s)
+        # count the number of each mutant at the endpoint
+        final_counts <- data[[i]][[1]] %>%
+            group_by(rep, variable) %>%
+            filter(time == endpoint, !(variable %in% c("W", "N"))) %>%
+            summarise(final_value = value, .groups = "keep") %>%
+            mutate(p_fix = 1 - current_phi ^ final_value)
+        # estimate the number of these mutations that will go on to fix
+        fixed <- final_counts %>%
             group_by(rep) %>%
-            summarise(
-                fix = any(value[variable == "M"] > c),
-                t = max(time[variable == "M" & near(value, 0)], 0) + dt
-            )
-
-        # fit the model
-        exp_fit <- survreg(Surv(t, fix) ~ 1, data = survival, dist = "exp")
-
-        # extract the log-scale estimate and standard error
-        log_estimate <- exp_fit$coefficient[1]
-        log_se <- sqrt(exp_fit$var)[1]
-
-        # compute a 95% confidence interval on the log scale
-        log_ci <- log_estimate + log_se * qnorm(c(0.025, 0.975))
-
-        # exponentiate to get a confidence interval for the mean on the original scale
-        ci <- exp(log_ci)
-
-        # store in summary
-        summary$rate[i] <- 1 / exp(log_estimate) / mut_per_gen
-        summary$ci_lower[i] <- 1 / ci[2] / mut_per_gen
-        summary$ci_upper[i] <- 1 / ci[1] / mut_per_gen
-        summary$naive_mean[i] <- 1 / mean(survival$t) / mut_per_gen
-        summary$wins[i] <- mean(survival$fix)
-
+            summarise(n = sum(final_value > 1e1), n_hat = sum(p_fix))
+        # estimate the fixation rate and store this
+        fixation_rate <- fixed$n_hat / endpoint / (N0 * m1)
+        summary$rate[i] <- mean(fixation_rate)
+        se <- sd(fixation_rate) / sqrt(length(fixation_rate))
+        ci <- summary$rate[i] + se * qnorm(c(0.025, 0.975))
+        summary$ci_lower[i] <- ci[1]
+        summary$ci_upper[i] <- ci[2]
+        # Note how far through the analysis we are
         print(i / nrow(summary))
     }
     return(summary)
 }
 
 summary <- metric(summary, data)
-summary$theory <- theory(summary$D, r, s, summary$N0, m1)
+summary$theory <- theory(summary$D, r, s)
 summary
-log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 1 & data[[1]][[1]]$time < 300, ])
-sols <- data[[4]][[1]]
-sols2 <- sols[sols$variable == "W" & sols$time <= 0.24 & sols$rep == 1,]
-print(sols2, n=50)
+
+log_plot(data[[5]][[1]][data[[1]][[1]]$rep <= 200 & data[[1]][[1]]$variable == "M50", ])
+
+data[[1]][[1]] %>%
+    filter(rep == 1, variable == "W") %>%
+    summarise(max(value)) %>%
+    pull() / data[[1]][[2]]$N0
+
 s <- 0.1
-N0 <- 1e8
-time <- 300
+time <- 50
 m1 <- 1e-9
 
 # Wahl 1 No resource constraints
-r <- 1.024
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 4.1), N0 = 10 ^ seq(9, 9, 1))
+r <- 1.023
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4.0, by = 0.1))
+summary$N0 <- summary$D ^ - 0.5 * 10 ^ 9
 data <- list()
 for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
@@ -134,9 +80,9 @@ for (i in seq_len(nrow(summary))) {
     # m1 <- summary$m1[i]
     data[[i]] <- simulate(
         seed = NULL,
-        rep = 1e2,
+        rep = 2e2,
         time = time,
-        dt = 1e0,
+        dt = 1e-1,
         tau = - log(D),
         D = D,
         N0 = N0,
@@ -149,7 +95,6 @@ for (i in seq_len(nrow(summary))) {
     )
     print(i / nrow(summary))
 }
-
 
 # Wahl 2 Constant resource concentration in dilution media
 r <- 1.1
@@ -212,18 +157,15 @@ for (i in seq_len(nrow(summary))) {
     # summary$ci_upper[i] <- ci[2]
 }
 
-summary$theory_approx <- N0 * m1 * r * summary$D * (1 - phi(summary$D, s))
-summary$theory_old <- fix_rate(summary$D, r, s, N0, m1)
-summary$theory_full <- theory(summary$D, r, s, N0, m1)
+summary$theory_approx <- r * summary$D * (1 - phi(summary$D, s))
+summary$theory_old <- solve_phi(summary$D, s) * theta(summary$D, s) * r / -log(summary$D)
 summary[c("D", "theory", "theory2")]
-png("images/test.png", width = 12, height = 10, units = "in", res = 300)
+# png("images/test.png", width = 12, height = 10, units = "in", res = 300)
 ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
     geom_line(aes(y = theory, color = "new")) +
-    geom_line(aes(y = theory_old, color = "old")) +
-    geom_line(aes(y = theory_full, color = "full")) +
-    scale_color_manual(values = c("new" = "red", "old" = "blue", "full" = "green")) +
+    scale_color_manual(values = c("new" = "red")) +
     theme_light() +
     scale_x_log10() +
     scale_y_log10() +
@@ -231,7 +173,7 @@ ggplot(summary, aes(x = D, y = rate)) +
     labs(
         # title = "Optimal Dilution Ratio (resource unconstrained)",
         x = "mutation rate",
-        y = "fixation rate",
+        y = "fixation rate (loci per hour per (mutations per generation))",
         color = "theoretical solution"
     ) +
     theme(
@@ -242,7 +184,7 @@ ggplot(summary, aes(x = D, y = rate)) +
         legend.text = element_text(size = 20),
         legend.position = "bottom"
     )
-dev.off()
+# dev.off()
 
 ggplot(summary, aes(x = D, y = wins)) +
     geom_point(size = 3) +
