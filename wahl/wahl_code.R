@@ -10,6 +10,11 @@ monod <- function(N, mu, k) {
   return(mu * ifelse(k == 0, 1, 1 / (1 + k / N)))
 }
 
+# fitness advantages of new mutants
+mutant_fitness <- function(num_mutants, r, s, names) {
+  return(setNames(r * (1 + c(0, rexp(num_mutants, 1 / s))), names))
+}
+
 # a function that reduces all populations by a factor of D, in expectation
 bottleneck <- function(state, config) {
   with(config, {
@@ -100,6 +105,9 @@ single_run <- function(config, x) {
     for (t in bottlenecks[-length(bottlenecks)]) {
       # Determine the time until the next bottleneck or dose
       end <- min(bottlenecks[bottlenecks > t] - t)
+      # Create a new vector of growth rates for mutants
+      mu_new <- mutant_fitness(num_mutants, r, s, names)
+      config$mu <- ifelse(state[0:num_mutants + 1] == 0, mu_new, config$mu)
       # Run the model between bottlenecks, deterministically or stochastically
       if (deterministic) {
         times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
@@ -149,7 +157,8 @@ simulate <- function(
   init_W = 1e8, # initial wild type population size
   init_M = 0, # initial mutant population sizes
   num_mutants = 1, # number of mutants
-  mu = c(W = 1, M = 1.1), # maximum growth rate
+  r = 1, # wild type growth rate with infinite resources
+  s = 0.1, # mean fitness effect size of beneficial mutation
   k = 1e8, # [N] at half-max growth rate
   alpha = 1 # nutrients used per replication
   ) {
@@ -157,7 +166,7 @@ simulate <- function(
   names <- c("W", paste0("M", 1:num_mutants))
   # count <- 0 # number of mutants that have arisen
   init <- setNames(c(init_W, rep(init_M, num_mutants), N0), c(names, "N"))
-  mu <- setNames(c(mu["W"], rep(mu["M"], num_mutants)), names)
+  mu <- mutant_fitness(num_mutants, r, s, names)
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
