@@ -55,22 +55,6 @@ division_rate <- Vectorize(function(influx, tau, D, mu, k) {
   return(result)
 })
 
-mu <- 1
-influx <- 1e9
-k <- 1e9
-plot(summary$D, summary$rate, log = "x", type = "l", xlab = "D", ylab = "rate")
-
-
-
-# Create a new variable for D^2
-summary$D_sq <- summary$D^2
-
-# Fit the quadratic model
-fit <- lm(rate ~ D + D_sq, data = summary)
-
-# Print the summary of the fit
-summary(fit)
-
 
 # evaluate a set of simulation results
 metric <- function(data) {
@@ -124,7 +108,7 @@ summary <- metric(summary, data2)
 summary$theory <- theory(summary$D, r, s)
 summary$approx <- approx_theory(summary$D, r, s)
 
-log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 3 & data[[1]][[1]]$time > 0, ])
+log_plot(data[[1]][data[[1]]$rep <= 1 & data[[1]]$time > 0, ])
 
 data[[1]][[1]] %>%
     filter(rep == 1, variable == "W") %>%
@@ -134,7 +118,7 @@ data[[1]][[1]] %>%
 
 # Wahl 1 No resource constraints
 s <- 0.1
-time <- 50
+time <- 100
 r <- 1.023
 N0 <- 1e9
 summary <- expand.grid(D = 10 ^ - seq(0.1, 2, by = 0.1))
@@ -164,22 +148,23 @@ for (i in seq_len(nrow(summary))) {
 
 # Wahl 2 Constant resource concentration in dilution media
 s <- 0.1
-time <- 200
+time <- 100
 N0 <- 1e9
-k_ratio <- 1e-2
-r <- 1.1 * (k_ratio + 1)
-summary <- expand.grid(D = 10 ^ - seq(0.1, 0.2, by = 0.1))
+k_ratio <- 1e0
+r <- 1 * (k_ratio + 1)
+summary <- expand.grid(D = 10 ^ - seq(0.1, 1, by = 0.02))
+summary$tau <- 24
 summary$m1 <- summary$D ^ - 0.5 * 1e-9
 data <- list()
 for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
-    tau <- - log(D)
-    m1 <- 1e-9
+    tau <- summary$tau[i]
+    m1 <- summary$m1[i]
     k <- k_ratio * N0
     if (D >= exp(-r * tau)) {
-        data[[1]] <- simulate(
+        data[[i]] <- simulate(
             seed = NULL,
-            rep = 1e1,
+            rep = 5e2,
             time = time,
             dt = 1e-1,
             tau = tau,
@@ -191,9 +176,9 @@ for (i in seq_len(nrow(summary))) {
             r = r,
             s = s,
             init_W = round(N0 * D),
-            num_mutants = 1e2
+            num_mutants = 2e1
         )
-        summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[1]])
+        summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
     }
     print(i / nrow(summary))
 }
@@ -230,8 +215,76 @@ ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
     # geom_line() +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
-    geom_line(aes(y = theory, color = "full")) +
-    geom_line(aes(y = approx, color = "approx")) +
+    geom_line(aes(y = -log(D) / tau * theory/2, color = "full")) +
+    geom_line(aes(y = -log(D) / tau * approx/2, color = "approx")) +
+    scale_color_manual(values = c("full" = "red", "approx" = "blue")) +
+    theme_light() +
+    scale_x_log10() +
+    scale_y_log10() +
+    # scale_y_continuous(limits = c(0,1)) +
+    labs(
+        # title = "Optimal Dilution Ratio (resource unconstrained)",
+        x = "D",
+        y = "fixation rate (loci per hour per (mutations per generation))",
+        color = "theory"
+    ) +
+    theme(
+        plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom"
+    )
+
+plot(summary$D, summary$rate, log = "x", type = "l", xlab = "D", ylab = "rate")
+
+mu <- 1
+influx <- 1e9
+k <- 1e7
+summary <- expand.grid(D = 10 ^ - seq(0.01, 0.2, by = 0.01), tau = 2 ^ - seq(0, 3, by = 0.1))
+summary$rate <- division_rate(influx, summary$tau, summary$D, mu, k)
+
+# png("images/test.png", width = 12, height = 10, units = "in", res = 300)
+p <- ggplot(summary, aes(x = D, y = log2(tau))) +
+    geom_tile(aes(fill = log10(rate))) +
+    scale_x_log10() +
+    # scale the y axis on a log2 scale
+    # scale_y_continuous(trans = "log2") +
+    scale_fill_gradient(low = "white", high = "blue",
+        breaks = pretty_breaks(n=2)) +
+    labs(x = "D", y = "log2 tau (hours)", fill = "log10 fixation rate",
+            title = "Optimal Dilution Ratio (constant resource flux)") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 30, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom"
+    )
+
+# Add line for optimal values
+p +
+geom_point(data = optimal_values, aes(x = D_at_max_rate, y = log2(tau)), color = "red", size = 4) +
+geom_line(data = optimal_values, aes(x = exp(-0.5 * tau), y = log2(tau)), color = "green", size = 1) +
+geom_line(data = summary, aes(x = D, y = log2(tau)), color = "black", size = 1)
+# dev.off()
+print(format(Sys.time(), "%H:%M"))
+
+optimal_values <- summary %>%
+  na.omit() %>%
+  group_by(tau) %>%
+  summarise(max_rate = max(rate), D_at_max_rate = D[which.max(rate)],
+  ci_lower = ci_lower[which.max(rate)], ci_upper = ci_upper[which.max(rate)])
+
+ggplot(optimal_values, aes(x = tau, y = max_rate)) +
+    geom_point(size = 3) +
+    # geom_line() +
+    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
+    # geom_line(aes(y = theory, color = "full")) +
+    # geom_line(aes(y = approx, color = "approx")) +
     scale_color_manual(values = c("full" = "red", "approx" = "blue")) +
     theme_light() +
     scale_x_log10() +
@@ -252,32 +305,7 @@ ggplot(summary, aes(x = D, y = rate)) +
         legend.position = "bottom"
     )
 
-
-summary <- expand.grid(D = 10 ^ - seq(0.01, 0.2, by = 0.01), tau = 2 ^ - seq(0, 3, by = 0.1))
-summary$rate <- division_rate(influx, summary$tau, summary$D, mu, k)
-
-# png("images/test.png", width = 12, height = 10, units = "in", res = 300)
-ggplot(summary, aes(x = D, y = log2(tau))) +
-    geom_tile(aes(fill = log10(rate))) +
-    scale_x_log10() +
-    # scale the y axis on a log2 scale
-    # scale_y_continuous(trans = "log2") +
-    scale_fill_gradient(low = "white", high = "blue",
-        breaks = pretty_breaks(n=2)) +
-    labs(x = "D", y = "log2 tau (hours)", fill = "log10 fixation rate",
-            title = "Optimal Dilution Ratio (constant resource flux)") +
-    theme_minimal() +
-    theme(
-        plot.title = element_text(size = 30, face = "bold", hjust = 0.5),
-        axis.title = element_text(size = 25, face = "bold"),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom"
-    )
-# dev.off()
-
 # # Save the simulation results to a file
-save(data, file = "C:/Users/s4528540/Downloads/results/data_05_06.RData")
+save(summary, file = "C:/Users/s4528540/Downloads/results/heatmap_zoomed.csv")
 # read the data file we just wrote back as data
 load("C:/Users/s4528540/Downloads/results/data4.RData")

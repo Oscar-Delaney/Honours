@@ -224,8 +224,6 @@ for (i in seq_len(nrow(summary))) {
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
-# load the saved file
-load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
 
 # resource constrained
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
@@ -260,54 +258,70 @@ save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constra
 # load the saved file
 load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
 
+optimal <- function(summary, r, s, part) {
+    # Define theory data
+    theory_data <- pivot_longer(data.frame(
+    D = summary$D,
+    theory = theory(summary$D, r, s),
+    approx1 = approx1_theory(summary$D, r, s),
+    wahl1 = s * summary$D * (log(summary$D) ^ 2),
+    wahl2 = s * summary$D * -log(summary$D)
+    ), cols = -D, names_to = "variable", values_to = "value")
 
-# Define theory data
-theory_data <- data.frame(
-  D = summary$D,
-  theory = theory(summary$D, 1, s),
-  approx1 = approx1_theory(summary$D, 1, s),
-  wahl1 = s * summary$D * (log(summary$D) ^ 2),
-  wahl2 = s * summary$D * -log(summary$D)
-)
-
-# Pivot the theory data to long format
-theory_long <- theory_data %>%
-    pivot_longer(cols = -D, names_to = "variable", values_to = "value")
+    # Adjust the levels of variable to match the order in color_palette and linetype_palette
+    theory_long$variable <- factor(theory_long$variable, levels = names(color_palette))
 
 
-# Define linetypes for the theory lines
-linetype_palette <- c("theory" = "solid", "approx1" = "dashed", "wahl1" = "solid", "wahl2" = "dashed")
+    # Define linetypes for the theory lines
+    linetype_palette <- c("theory" = "solid", "approx1" = "dotted", "wahl1" = "solid", "wahl2" = "dotted")
 
-# Define a palette for the theory lines
-color_palette <- c("theory" = scico(2, palette = "vik")[1], 
-                   "approx1" = scico(2, palette = "vik")[1], 
-                   "wahl1" = scico(2, palette = "vik")[2], 
-                   "wahl2" = scico(2, palette = "vik")[2])
+    # Define a palette for the theory lines
+    color_palette <- c("theory" = scico(2, palette = "vik")[1], 
+                    "approx1" = scico(2, palette = "vik")[1], 
+                    "wahl1" = scico(2, palette = "vik")[2], 
+                    "wahl2" = scico(2, palette = "vik")[2])
 
-# Plotting
-ggplot() +
-  geom_point(data = summary, aes(x = D, y = rate), color = "black", size = 5) +
-  geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), color = "black", size = 1) +
-  geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), size = 2) +
-  scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
-  scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
-  scale_x_log10() +
-  scale_y_log10() +
-  labs(
-    x = expression(italic("D")),
-    y = expression("fixation rate (loci hour"^-1*"mu"^-1*"N"^-1*")"),
-    color = "Model", # This will be the title of the unified legend
-    linetype = "Model"
-  ) +
-  guides(
-    color = guide_legend(override.aes = list(shape = c(NA,NA,NA,NA))),
-    linetype = guide_legend(override.aes = list(size = 2))  # This line adjusts the size of lines in the legend
-  ) +
-  theme_light() +
-  theme(
-    axis.title = element_text(size = 25),
-    axis.text = element_text(size = 25),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    legend.position = "bottom"
-  )
+    # Plotting
+    p <- ggplot() +
+    geom_point(data = summary, aes(x = D, y = rate), color = "black", size = 5) +
+    geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), color = "black", size = 1) +
+    geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), size = 2) +
+    scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
+    scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(
+        x = expression(italic("D")),
+        y = expression("fixation rate (loci hour"^-1*"mu"^-1*"N"^-1*")"),
+        color = "Model", # This will be the title of the unified legend
+        linetype = "Model"
+    ) +
+    guides(
+        color = guide_legend(override.aes = list(linetype = rep(c("solid", "dotted"), 2)), ncol = 2),
+        linetype = "none"
+    ) +
+    annotate("text", x = 1e-4, y = 1e-1, size = 15,
+           label = part, fontface = "bold", hjust = 0, vjust = 1) +
+    theme_light() +
+    theme(
+        axis.title = element_text(size = 25),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom",
+        legend.key.size = unit(2, "cm"), # Adjust this value as needed
+        legend.spacing.x = unit(0.5, "cm"), # Adjust this value as needed
+        legend.text.align = 0
+    )
+    return(p)
+}
+
+# load the saved file
+load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
+summary1 <- summary
+load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+summary2 <- summary
+# save as pdf
+pdf("wahl/figs/optimal.pdf", width = 20, height = 10)
+grid.arrange(optimal(summary1, 1, 0.1, "A"), optimal(summary2, 0.5, 0.1, "B"), ncol = 2)
+dev.off()
