@@ -127,9 +127,9 @@ data <- list()
 for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
     m1 <- summary$m1[i]
-    data[[i]] <- simulate(
+    data[[1]] <- simulate(
         seed = NULL,
-        rep = 1e2,
+        rep = 1e3,
         time = time,
         dt = 1e-1,
         tau = - log(D),
@@ -140,9 +140,9 @@ for (i in seq_len(nrow(summary))) {
         r = r,
         s = s,
         init_W = round(N0 * D),
-        num_mutants = 1e2
+        loci = 6
     )
-    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
+    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[1]])
     print(i / nrow(summary))
 }
 
@@ -215,8 +215,8 @@ ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
     # geom_line() +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
-    geom_line(aes(y = -log(D) / tau * theory/2, color = "full")) +
-    geom_line(aes(y = -log(D) / tau * approx/2, color = "approx")) +
+    geom_line(aes(y = theory, color = "full")) +
+    geom_line(aes(y = approx, color = "approx")) +
     scale_color_manual(values = c("full" = "red", "approx" = "blue")) +
     theme_light() +
     scale_x_log10() +
