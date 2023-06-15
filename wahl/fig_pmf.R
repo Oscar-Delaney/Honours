@@ -227,6 +227,39 @@ save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconst
 # load the saved file
 load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
 
+# resource constrained
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
+summary$m1 <- summary$D ^ - 0.5 * 1e-9
+data <- list()
+for (i in seq_len(nrow(summary))) {
+    D <- summary$D[i]
+    m1 <- summary$m1[i]
+    N0 <- 1e9
+    data <- simulate(
+        seed = NULL,
+        rep = 1e3,
+        time = 100,
+        dt = 1e-1,
+        tau = - log(D),
+        max_step = Inf,
+        D = D,
+        N0 = N0,
+        k = N0,
+        alpha = 1,
+        r = 1.023 * 2.1,
+        s = s,
+        init_W = round(N0 * D),
+        num_mutants = 1e2
+    )
+    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data)
+    print(i / nrow(summary))
+}
+
+# Save the summary to a file
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+# load the saved file
+load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+
 
 # Define theory data
 theory_data <- data.frame(
@@ -241,24 +274,36 @@ theory_data <- data.frame(
 theory_long <- theory_data %>%
     pivot_longer(cols = -D, names_to = "variable", values_to = "value")
 
-# Define color palette
-my_colors <- setNames(scico(5, palette = "roma"), 
-                      c("full", "approx1", "approx2", "wahl1", "wahl2"))
 
+# Define linetypes for the theory lines
+linetype_palette <- c("theory" = "solid", "approx1" = "dashed", "wahl1" = "solid", "wahl2" = "dashed")
+
+# Define a palette for the theory lines
+color_palette <- c("theory" = scico(2, palette = "vik")[1], 
+                   "approx1" = scico(2, palette = "vik")[1], 
+                   "wahl1" = scico(2, palette = "vik")[2], 
+                   "wahl2" = scico(2, palette = "vik")[2])
+
+# Plotting
 ggplot() +
-  geom_point(data = summary, aes(x = D, y = rate), size = 3) +
-  geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper)) +
-  geom_line(data = theory_long, aes(x = D, y = value, color = variable), size = 1) +
-  scale_color_manual(values = my_colors) +
-#   scale_shape_manual(values = my_shapes) +
-  theme_light() +
+  geom_point(data = summary, aes(x = D, y = rate), color = "black", size = 5) +
+  geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), color = "black", size = 1) +
+  geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), size = 2) +
+  scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
+  scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
   scale_x_log10() +
   scale_y_log10() +
   labs(
     x = expression(italic("D")),
     y = expression("fixation rate (loci hour"^-1*"mu"^-1*"N"^-1*")"),
-    color = "theory"
+    color = "Model", # This will be the title of the unified legend
+    linetype = "Model"
   ) +
+  guides(
+    color = guide_legend(override.aes = list(shape = c(NA,NA,NA,NA))),
+    linetype = guide_legend(override.aes = list(size = 2))  # This line adjusts the size of lines in the legend
+  ) +
+  theme_light() +
   theme(
     axis.title = element_text(size = 25),
     axis.text = element_text(size = 25),
