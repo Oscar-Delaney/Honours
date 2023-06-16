@@ -58,32 +58,40 @@ division_rate <- Vectorize(function(influx, tau, D, mu, k) {
 
 # evaluate a set of simulation results
 metric <- function(data) {
-    # extract the mutation rate and population size
+    # extract some relevant parameters
     m1 <- data[[2]]$m1
-    N0 <- data[[2]]$N0
+    wt_max <- data[[2]]$init_W / data[[2]]$D
+    wt <- data[[2]]$names[1]
+    loci <- data[[2]]$loci
+    current_phi <- phi(data[[2]]$D, data[[2]]$s)
     # find the time just after the last bottleneck
     endpoint <- data[[1]] %>%
-        filter(variable == "W", rep == 1) %>%
+        filter(variable == wt, rep == 1) %>%
         filter(value - lag(value) < 0) %>%
         tail(1) %>%
         pull(time)
-    # find the likelihood of a new mutation at t=0 going extinct 
-    current_phi <- phi(data[[2]]$D, s)
-    # count the number of each mutant at the endpoint
-    final_counts <- data[[1]] %>%
-        group_by(rep, variable) %>%
-        filter(time == endpoint, !(variable %in% c("W", "N"))) %>%
-        summarise(final_value = value, .groups = "keep") %>%
+    # find the number of each genotype at the endpoint
+    final <- data[[1]] %>%
+        filter(time == endpoint, variable != "N")
+    # Note which mutatiosn each genotype has
+    for (i in 1:loci) {
+        final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
+    }
+    # Calculate the abundance and p_fix for each mutation
+    counts <- final %>%
+        pivot_longer(
+            cols = starts_with("M"),
+            names_to = "Mutant",
+            values_to = "Mutant_value"
+        ) %>%
+        group_by(rep, Mutant) %>%
+        summarise(final_value = sum(value * Mutant_value), .groups = "keep") %>%
         mutate(p_fix = 1 - current_phi ^ final_value)
-    # estimate the number of these mutations that will go on to fix
-    fixed <- final_counts %>%
-        group_by(rep) %>%
-        summarise(n = sum(final_value > 1e1), n_hat = sum(p_fix))
     # estimate the fixation rate and store this
-    fixation_rate <- fixed$n_hat / endpoint / (N0 * m1)
+    fixation_rate <- counts$p_fix / endpoint / (wt_max * m1)
     se <- sd(fixation_rate) / sqrt(length(fixation_rate))
     ci <- mean(fixation_rate) + se * qnorm(c(0.5, 0.025, 0.975))
-    return(ci)
+    return(counts)
 }
 
 # find the time at which the wild-type population is less than half its initial value
@@ -108,7 +116,7 @@ summary <- metric(summary, data2)
 summary$theory <- theory(summary$D, r, s)
 summary$approx <- approx_theory(summary$D, r, s)
 
-log_plot(data[[1]][data[[1]]$rep <= 1 & data[[1]]$time > 0, ])
+log_plot(data[[1]][data[[1]]$rep == 1 & data[[1]]$time > 0, ])
 
 data[[1]][[1]] %>%
     filter(rep == 1, variable == "W") %>%
@@ -121,30 +129,36 @@ s <- 0.1
 time <- 100
 r <- 1.023
 N0 <- 1e9
-summary <- expand.grid(D = 10 ^ - seq(0.1, 2, by = 0.1))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$m1 <- summary$D ^ - 0.5 * 1e-9
 data <- list()
+collate <- list()
 for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
     m1 <- summary$m1[i]
-    data[[1]] <- simulate(
+    data <- simulate(
         seed = NULL,
         rep = 1e3,
         time = time,
         dt = 1e-1,
         tau = - log(D),
         D = D,
+        m1 = m1,
         N0 = N0,
-        k = 0,
-        alpha = 0,
+        k = 1,
+        alpha = 1,
         r = r,
         s = s,
         init_W = round(N0 * D),
         loci = 6
     )
-    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[1]])
+    # summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
+    collate[i] <- metric(data)
     print(i / nrow(summary))
 }
+summary$theory <- theory(summary$D, 1, 0.1)
+summary$approx <- approx_theory(summary$D, 1, 0.1)
+summary
 
 # Wahl 2 Constant resource concentration in dilution media
 s <- 0.1
@@ -206,10 +220,7 @@ for (i in seq_len(nrow(summary))) {
 
 summary <- metric(summary, data2)
 summary <- data.frame(D = 10 ^ - seq(0.01, 5, by = 0.01), s = 0.01, r = 0.1)
-summary$rate <- theory(summary$D, summary$r, summary$s)
 summary$approx <- summary$r * summary$s * log(1 / summary$D) / (1 / summary$D - 1)
-
-
 # png("images/test.png", width = 12, height = 10, units = "in", res = 300)
 ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
