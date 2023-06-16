@@ -77,7 +77,7 @@ metric <- function(data) {
     for (i in 1:loci) {
         final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
     }
-    # Calculate the abundance and p_fix for each mutation
+    # Calculate the abundance and probability  for each mutation
     counts <- final %>%
         pivot_longer(
             cols = starts_with("M"),
@@ -85,13 +85,14 @@ metric <- function(data) {
             values_to = "Mutant_value"
         ) %>%
         group_by(rep, Mutant) %>%
-        summarise(final_value = sum(value * Mutant_value), .groups = "keep") %>%
-        mutate(p_fix = 1 - current_phi ^ final_value)
+        summarise(final_value = sum(value * Mutant_value), .groups = "keep")
     # estimate the fixation rate and store this
-    fixation_rate <- counts$p_fix / endpoint / (wt_max * m1)
-    se <- sd(fixation_rate) / sqrt(length(fixation_rate))
-    ci <- mean(fixation_rate) + se * qnorm(c(0.5, 0.025, 0.975))
-    return(counts)
+    mean <- mean(current_phi ^ counts$final_value)
+    ci <- binom.test(x = round(nrow(counts) * c(mean, 1 - mean)))$conf.int
+    vec <- c(mean, rev(ci))
+    # Note the inverse cdf of the exponential distribution is -log(1-F(x))/lambda
+    fixation_rate <- - log(vec) / (endpoint * wt_max * m1 / loci)
+    return(fixation_rate)
 }
 
 # find the time at which the wild-type population is less than half its initial value
@@ -116,7 +117,7 @@ summary <- metric(summary, data2)
 summary$theory <- theory(summary$D, r, s)
 summary$approx <- approx_theory(summary$D, r, s)
 
-log_plot(data[[1]][data[[1]]$rep == 1 & data[[1]]$time > 0, ])
+log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 4 & data[[1]][[1]]$time > 0, ])
 
 data[[1]][[1]] %>%
     filter(rep == 1, variable == "W") %>%
@@ -126,19 +127,19 @@ data[[1]][[1]] %>%
 
 # Wahl 1 No resource constraints
 s <- 0.1
-time <- 100
+loci = 3
+time <- 10
 r <- 1.023
 N0 <- 1e9
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 2, by = 0.1))
 summary$m1 <- summary$D ^ - 0.5 * 1e-9
 data <- list()
-collate <- list()
 for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
     m1 <- summary$m1[i]
-    data <- simulate(
+    data[[i]] <- simulate(
         seed = NULL,
-        rep = 1e3,
+        rep = 1e2,
         time = time,
         dt = 1e-1,
         tau = - log(D),
@@ -150,10 +151,9 @@ for (i in seq_len(nrow(summary))) {
         r = r,
         s = s,
         init_W = round(N0 * D),
-        loci = 6
+        loci = loci
     )
-    # summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
-    collate[i] <- metric(data)
+    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
     print(i / nrow(summary))
 }
 summary$theory <- theory(summary$D, 1, 0.1)
