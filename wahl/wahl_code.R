@@ -26,12 +26,12 @@ bottleneck <- function(state, config) {
 }
 
 # a function outputting the transitions that can occur in the model
-make_transitions <- function(loci) {
+make_transitions <- function(names) {
     # Create the initial list
     rate_list <- list()
     # Add the growth rates for each mutant
-    for (i in 1:2^loci) {
-      rate_list[[paste0("G", i, "_growth")]] <- setNames(c(+1), paste0("G", i))
+    for (i in names) {
+      rate_list[[paste0(i, "_growth")]] <- setNames(c(+1), i)
     }
     # Add the nutrient depletion rate
     rate_list[["N_depletion"]] <- setNames(c(-1), "N")
@@ -42,7 +42,7 @@ make_transitions <- function(loci) {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- state[names] * monod(N, genotypes$r, k)
+    replication_rates <- state[names] * monod(N, r_max, k)
     # Calculate growth rates including mutations
     growth_rates <- t(replication_rates) %*% mutation_matrix
     # Calculate nutrient depletion rate
@@ -68,7 +68,10 @@ ode_rates <- function(t, state, config) {
 single_run <- function(config, x) {
   with(config, {
     # Define the transitions of the model
-    transitions <- make_transitions(loci)
+    transitions <- make_transitions(names)
+    # Define the fitness of each genotype
+    fitness <- rexp(loci, 1 / s)
+    config$r_max <- r * (1 + as.matrix(genotypes) %*% fitness)
     # Initialise the state variables
     state <- init
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
@@ -132,6 +135,9 @@ simulate <- function(
   if(loci > 10) {
     stop("Too many loci")
   }
+  # Define the starting state
+  names <- paste0("G",intToBin(1:2^loci - 1))
+  init <- setNames(c(init_W, rep(init_M, 2^loci - 1), N0), c(names, "N"))
   # Generate all possible binary strings of length loci
   genotypes <- expand.grid(replicate(loci, c(0, 1), simplify = FALSE))
   genotypes <- setNames(rev(genotypes), paste0("M", 1:loci))
@@ -142,18 +148,13 @@ simulate <- function(
     for (j in 1:2^loci) {
       # Compute the Hamming distance between the two genotypes
       hamming_distance <- sum(genotypes[i, ] != genotypes[j, ])
+      # hamming_distance <- sum(strsplit(names[i], "")[[1]] != strsplit(names[j], "")[[1]])
       # If the Hamming distance is 1, set the mutation rate
       if (hamming_distance == 1) {
         mutation_matrix[i, j] <- m1 / loci
       }
     }
   }
-  # Define the fitness of each genotype
-  fitness <- rexp(loci, 1 / s)
-  genotypes$r <- r * (1 + as.matrix(genotypes) %*% fitness)
-  # Define the starting state
-  names <- paste0("G", 1:2^loci)
-  init <- setNames(c(init_W, rep(init_M, 2^loci - 1), N0), c(names, "N"))
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
@@ -241,5 +242,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-system.time(log_plot(simulate(loci = 7)[[1]]))
+system.time(log_plot(simulate(loci = 4)[[1]]))
 # simulate(deterministic = TRUE)[[1]]$value[3001:3003]
