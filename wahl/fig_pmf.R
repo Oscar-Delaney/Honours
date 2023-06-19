@@ -24,19 +24,20 @@ pmf_b2 <- table(b2) / rep
 # Create a dataframe for plotting
 df <- data.frame(value = as.numeric(names(pmf_b)), pmf_b = as.numeric(pmf_b),
                  pmf_b2 = as.numeric(pmf_b2[names(pmf_b)]))
-
+label <- c("Present Analysis", "Wahl et al., 2002")
 # Plot the PMFs
 pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
 ggplot(df, aes(x = value)) +
-  geom_point(aes(y = pmf_b, colour = 'Present Analysis', shape = 'Present Analysis'), size = 5) +
-  geom_point(aes(y = pmf_b2, colour = 'Wahl et al., 2002', shape = 'Wahl et al., 2002'), size = 5) +
-  scale_color_manual(values = setNames(scico(2, palette = "roma"),
-    c("Present Analysis", "Wahl et al., 2002"))) +
-  scale_shape_manual(values = c("Present Analysis" = 19, "Wahl et al., 2002" = 17)) +
+  geom_point(aes(y = pmf_b, colour = label[1], shape = label[1]), size = 5) +
+  geom_point(aes(y = pmf_b2, colour = label[2], shape = label[2]), size = 5) +
+  scale_color_manual(values = setNames(scico(2, palette = "roma"), label)) +
+  scale_shape_manual(values = setNames(c(19, 17), label)) +
   theme_light() +
-  scale_y_log10() +
+  scale_y_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
   labs(
-    x = expression(italic(M(tau^"+"))),
+    x = expression(paste("mutants remaining after bottlenecking, ", italic(M(tau^"+")))),
     y = "probability mass",
     colour = NULL,
     shape = NULL
@@ -244,7 +245,7 @@ for (i in seq_len(nrow(summary))) {
         N0 = N0,
         k = N0,
         alpha = 1,
-        r = 1.023 * 2.1,
+        r = 1.023 * 4,
         s = s,
         init_W = round(N0 * D),
         num_mutants = 1e2
@@ -255,12 +256,19 @@ for (i in seq_len(nrow(summary))) {
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
-# load the saved file
-load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
 
 optimal <- function(summary, r, s, part) {
+    # Define linetypes for the theory lines
+    linetype_palette <- c("theory" = "solid", "approx1" = "dotted", "wahl1" = "solid", "wahl2" = "dotted")
+
+    # Define a palette for the theory lines
+    color_palette <- c("theory" = scico(2, palette = "vik")[1], 
+                    "approx1" = scico(2, palette = "vik")[1], 
+                    "wahl1" = scico(2, palette = "vik")[2], 
+                    "wahl2" = scico(2, palette = "vik")[2])
+
     # Define theory data
-    theory_data <- pivot_longer(data.frame(
+    theory_long <- pivot_longer(data.frame(
     D = summary$D,
     theory = theory(summary$D, r, s),
     approx1 = approx1_theory(summary$D, r, s),
@@ -272,15 +280,6 @@ optimal <- function(summary, r, s, part) {
     theory_long$variable <- factor(theory_long$variable, levels = names(color_palette))
 
 
-    # Define linetypes for the theory lines
-    linetype_palette <- c("theory" = "solid", "approx1" = "dotted", "wahl1" = "solid", "wahl2" = "dotted")
-
-    # Define a palette for the theory lines
-    color_palette <- c("theory" = scico(2, palette = "vik")[1], 
-                    "approx1" = scico(2, palette = "vik")[1], 
-                    "wahl1" = scico(2, palette = "vik")[2], 
-                    "wahl2" = scico(2, palette = "vik")[2])
-
     # Plotting
     p <- ggplot() +
     geom_point(data = summary, aes(x = D, y = rate), color = "black", size = 5) +
@@ -289,7 +288,9 @@ optimal <- function(summary, r, s, part) {
     scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
     scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
     scale_x_log10() +
-    scale_y_log10() +
+    scale_y_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(
         x = expression(italic("D")),
         y = expression("fixation rate (loci hour"^-1*"mu"^-1*"N"^-1*")"),
@@ -315,6 +316,7 @@ optimal <- function(summary, r, s, part) {
     )
     return(p)
 }
+optimal(summary2, 0.5, 0.1, 1)
 
 # load the saved file
 load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
@@ -323,5 +325,6 @@ load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
 summary2 <- summary
 # save as pdf
 pdf("wahl/figs/optimal.pdf", width = 20, height = 10)
-grid.arrange(optimal(summary1, 1, 0.1, "A"), optimal(summary2, 0.5, 0.1, "B"), ncol = 2)
+grid.arrange(optimal(summary1, 1, 0.1, "A"),
+    optimal(summary2, 1, 0.1, "B"), ncol = 2)
 dev.off()
