@@ -1,40 +1,37 @@
 source("stochastic.R")
 
-# A function to interpret a simulation run
-metrics <- function(sols, D) {
-    # Filter the data frame to keep only the last time step
-    final <- sols[sols$time == max(sols$time), ]
-    # Calculate the average final double-resistant population size
-    R12 <- mean(final$value[final$variable == "R12"])
-    # Calculate the average final bacterial population size
-    total <- mean(final$value) * 4
-    # Calculate the proportion of runs with MDR emergingg=
-    R12 <- sols[sols$variable == "R12" & sols$time == max(sols$time), ]$value
-    wins <- mean(R12 * D > 1e3)
-    return(wins)
+# Total population
+total_pop <- function(sol, dt = 1, strains = c("S", "R1", "R2", "R12")) {
+  sol %>%
+    filter(variable %in% strains) %>%
+    group_by(rep) %>%
+    summarise(total = sum(value) * dt) %>%
+    pull(total)
 }
 
-metrics_plot <- function(summary, metric) {
-    title <- ifelse(metric == "R12", "Final R12 Population Size",
-        "Final Total Population Size")
-    # Plot the summary statistics
-    ggplot(summary, aes(x = D, y = HGT, size = log10(get(metric)+1))) +
-    geom_point() +
-    scale_x_log10() +
-    scale_y_log10() +
-    theme_minimal() +
-    labs(title = title,
-        x = "Dilution fraction D)",
-        y = "Recombination rate",
-        size = paste("log_10 of", metric)) +
-    theme(
-        legend.position = "bottom",
-        plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-        axis.title = element_text(size = 25, face = "bold"),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20)
-    )
+# Final population
+final_pop <- function(sol, strains = c("S", "R1", "R2", "R12")) {
+  sol %>%
+    filter(time == max(time) & variable %in% strains) %>%
+    group_by(rep, variable) %>%
+    summarise(final = sum(value)) %>%
+    pull(final)
+}
+
+# Time to reach target
+target_time <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
+  sol %>%
+    filter(variable %in% strains) %>%
+    group_by(rep, time) %>%
+    summarise(total = sum(value), .groups = "drop") %>%
+    group_by(rep) %>%
+    summarise(t = time[min(which(diff(sign(total - target)) != 0), Inf)]) %>%
+    pull(t)
+}
+
+# Whether target was hit
+target_hit <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
+  !is.na(target_time(sol, target, strains))
 }
 
 log_plot(data[[72]][[1]][data[[1]][[1]]$rep <= 10, ])
