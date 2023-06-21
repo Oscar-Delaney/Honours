@@ -272,8 +272,8 @@ optimal <- function(summary, r, s, part) {
     D = summary$D,
     theory = theory(summary$D, r, s),
     approx1 = approx1_theory(summary$D, r, s),
-    wahl1 = s * summary$D * (log(summary$D) ^ 2),
-    wahl2 = s * summary$D * -log(summary$D)
+    wahl1 = 2 * s * summary$D * (log(summary$D) ^ 2),
+    wahl2 = 2 * s * summary$D * -log(summary$D)
     ), cols = -D, names_to = "variable", values_to = "value")
 
     # Adjust the levels of variable to match the order in color_palette and linetype_palette
@@ -287,7 +287,9 @@ optimal <- function(summary, r, s, part) {
     geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), size = 2) +
     scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
     scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
-    scale_x_log10() +
+    scale_x_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     scale_y_continuous(trans = scales::log10_trans(),
         breaks = 10^seq(-7, 0),
         labels = scales::trans_format("log10", scales::math_format(10^.x))) +
