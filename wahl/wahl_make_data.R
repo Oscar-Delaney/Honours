@@ -320,3 +320,44 @@ ggplot(optimal_values, aes(x = tau, y = max_rate)) +
 save(summary, file = "C:/Users/s4528540/Downloads/results/heatmap_zoomed.csv")
 # read the data file we just wrote back as data
 load("C:/Users/s4528540/Downloads/results/data4.RData")
+
+
+r <- 1
+s <- 0.1
+summary <- data.frame(D = 10 ^ - seq(0.01, 4, by = 0.01))
+summary$tau <- -log(summary$D) / r
+# first position is stochastic growth
+# second is correct binomial sampling
+# third is dividing by tau
+summary$M000 <- 2*s*summary$D*(log(summary$D)^2)
+summary$M001 <- summary$M000 / summary$tau
+summary$M111 <- theory(summary$D, r, s)
+summary$M110 <- summary$M111 * summary$tau
+summary$M011 <- summary$D * phi(summary$D, s)
+summary$M010 <- summary$M011 * summary$tau
+
+
+# pivot longer
+summary <- summary %>%
+    pivot_longer(cols = starts_with("M"), names_to = "model", values_to = "rate")
+
+ggplot(summary, aes(x = D, y = rate)) +
+    geom_line(aes(color = model)) +
+    theme_light() +
+    scale_x_log10() +
+    scale_y_log10() +
+    # scale_y_continuous(limits = c(0,1)) +
+    labs(
+        # title = "Optimal Dilution Ratio (resource unconstrained)",
+        x = "D",
+        y = "fixation rate (loci per hour per (mutations per generation))",
+        color = "theory"
+    ) +
+    theme(
+        plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 25, face = "bold"),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom"
+    )
