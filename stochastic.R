@@ -33,6 +33,7 @@ death <- function(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta) {
 
 # a growth rate function for nutrient-limited growth
 monod <- function(N, mu, k) {
+  if (N == 0) {return(0)}
   return(mu * ifelse(k == 0, 1, 1 / (1 + k / N)))
 }
 
@@ -73,6 +74,7 @@ make_transitions <- function() {
   HGT_MDR_loss = c(S = -1, R1 = +1, R2 = +1, R12 = -1),
   HGT_MDR_gain = c(S = +1, R1 = -1, R2 = -1, R12 = +1),
   N_depletion = c(N = -1),
+  N_antidepletion = c(N = +1),
   A1_depletion = c(A1 = -1),
   A2_depletion = c(A2 = -1)
 ))
@@ -101,11 +103,12 @@ rates <- function(state, config, t) {
     HGT_MDR_loss <- HGT * R12 * S
     HGT_MDR_gain <- HGT * R1 * R2
     N_depletion <- sum(replication_rates * alpha)
+    N_antidepletion <- supply
     A1_depletion <- d1 * A1
     A2_depletion <- d2 * A2
     # Combine all rates and return
     rate_list <- c(growth_rates, death_rates, HGT_MDR_loss, HGT_MDR_gain,
-      N_depletion, A1_depletion, A2_depletion)
+      N_depletion, N_antidepletion, A1_depletion, A2_depletion)
     return(setNames(rate_list, names(make_transitions())))
   })
 }
@@ -171,6 +174,7 @@ single_run <- function(config, x) {
       setNames(approx_vars, colnames(solution)),
       rep = x
     )
+    # return(solution)
     return(solution_interpolated)
   })
 }
@@ -207,12 +211,14 @@ simulate <- function(
   theta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # drug interaction term
   mu = 0.88 * c(S = 1, R1 = 0.9, R2 = 0.9, R12 = 0.81), # maximum growth rate
   k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # [N] at half-max growth rate
-  alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1) # nutrients used per replication
+  alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # nutrients used per replication
+  supply = 0 # nutrient supply rate
   ) {
   # Define the parameters of the model
   config <- as.list(environment())
   config$influx <- influx * c(zeta1["S"], zeta2["S"]) # normalise drug units
   config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
+  # return(config)
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
   solutions <- bind_rows(future_lapply(1:rep, function(x) {
@@ -324,5 +330,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-system.time(log_plot(simulate(init = c(S = 1e8, R1=0, R2=0, R12=0), seed = 13, N0 = 1e9, k=1, time = 100, influx = c(A1=0,A2=0))[[1]], type = "all"))
+system.time(log_plot(simulate()[[1]]))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
