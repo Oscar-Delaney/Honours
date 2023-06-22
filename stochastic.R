@@ -229,7 +229,7 @@ simulate <- function(
   return(list(long, config))
 }
 
-log_plot <- function(solutions, type = "all") {
+log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
   # Choose the type of central tendency and range to plot
   if (type == "mean") {
     summary <- solutions %>%
@@ -262,11 +262,11 @@ log_plot <- function(solutions, type = "all") {
     stop("type must be 'all', 'median' or 'mean'")
   }
   filtered <- summary %>%
-    filter(variable %in% c("S", "R1", "R2", "R12")) %>%
-    mutate(variable = factor(variable, levels = c("S", "R1", "R2", "R12"))) %>%
+    filter(variable %in% use) %>%
+    mutate(variable = factor(variable, levels = use)) %>%
     arrange(variable)
   # Initialise the colours
-  colors <- c("black", "navy", "#800000", "#008000")
+  colors <- c("black", "navy", "#800000", "#008000", "gold")
   # Create antibiotic concentrations data frame
   background_df <- solutions %>%
     filter(rep == min(rep) & variable %in% c("A1", "A2")) %>%
