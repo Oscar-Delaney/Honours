@@ -13,7 +13,7 @@ total_pop <- function(sol, dt = 1, strains = c("S", "R1", "R2", "R12")) {
 final_pop <- function(sol, strains = c("S", "R1", "R2", "R12")) {
   sol %>%
     filter(time == max(time) & variable %in% strains) %>%
-    group_by(rep, variable) %>%
+    group_by(rep) %>%
     summarise(final = sum(value)) %>%
     pull(final)
 }
@@ -34,44 +34,41 @@ target_hit <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
   !is.na(target_time(sol, target, strains))
 }
 
-log_plot(data[[72]][[1]][data[[1]][[1]]$rep <= 10, ])
-sol <- data[[3]][[1]]
-sol[sol$variable == "N" & sol$time == max(sol$time), ]$value
+sols <- data[[12]][[1]]
+log_plot(sols[sols$rep <=10,])
+
 # Create a grid of parameter combinations
-time <- 3e2
-# summary <- expand.grid(HGT = HGT_range)
-summary <- expand.grid(dose_rep = seq(1, 24, 3), kappa = seq(0.5, 3, 0.3))
-# summary$wins <- 0
+summary <- expand.grid(dose_rep = seq(1, 24, 1), kappa = seq(1, 1, 0.1))
 
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[i]] <- simulate(
-    init = c(S = 1e15, R1 = 0, R2 = 0, R12 = 0),
-    N0 = 1e16,
-    k = 0,
-    alpha = 0,
-    mu = 0.15 * c(1, 0.8, 0.8, 0.64),
-    phi1 = 0.6,
-    phi2 = 0.6,
-    time = time,
-    rep = 1e2,
-    D = 1,
+    init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0),
+    N0 = 1e10,
+    k = 1e8,
+    supply = 1e10,
+    mu = 1.6 * c(1, 0.9, 0.9, 0.8),
+    phi1 = 2,
+    phi2 = 2,
+    time = 60,
+    tau = 1e4,
+    rep = 1e3,
     HGT = 0,
     dose_rep = summary$dose_rep[i],
-    dose_gap = 24 / summary$dose_rep[i],
-    influx = 15 * c(A1 = 1, A2 = 1) / summary$dose_rep[i],
-    m1 = 1.5e-8, m2 = 1.5e-8,
+    dose_gap = 12 / summary$dose_rep[i],
+    influx = 10 * c(A1 = 1, A2 = 1) / summary$dose_rep[i],
+    m1 = 1e-9, m2 = 1e-9,
+    alpha = 1,
     kappa1 = summary$kappa[i],
     kappa2 = summary$kappa[i],
 )
+# log_plot(data[[4]][[1]], use = c("S", "R1"))
 print(i / nrow(summary))
 }
 
 # Calculate the summary statistics
 for (i in seq_len(nrow(summary))) {
-    sols <- data[[i]][[1]]
-    R12 <- sols[sols$variable == "R12" & sols$time == max(sols$time), ]$value
-    summary$wins[i] <- mean(R12 * data[[i]][[2]]$D > 1e3)
+    summary$wins[i] <- mean(final_pop(data[[i]][[1]], c("R1", "R2")) > 1e3)
     rep <- data[[i]][[2]]$rep
     ci <- binom.test(summary$wins[i] * rep, rep, conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
