@@ -1,4 +1,5 @@
 source("wahl/wahl_code.R")
+source("wahl/data_analysis.R")
 library(hypergeo)
 library(scales)
 library(scico)
@@ -6,13 +7,11 @@ library(gridExtra)
 
 
 ### fig:binomial
-c("Present Analysis" = scico(2, palette = "vik")[1], 
-                                "Wahl et al., 2002" = scico(2, palette = "vik")[2])
-
 D <- 0.9
 s <- 0.1
 N <- 1e8
 rep <- 1e6
+set.seed(0)
 m <- 1 + rgeom(rep, D ^ (1 + s))
 b <- rbinom(rep, m, D)
 b2 <- rbinom(rep, N*D, D ^ -(1 + s) / N)
@@ -55,9 +54,7 @@ dev.off()
 
 ### fig dynamics
 data1 <- simulate(
-    rep = 1,
     seed = 1,
-    deterministic = FALSE,
     time = 30,
     dt = 1e-3,
     max_step = 1e-3,
@@ -67,17 +64,18 @@ data1 <- simulate(
     m1 = 3e-9,
     init_W = 1e8,
     init_M = 0,
-    num_mutants = 10,
+    # num_mutants = 10,
+    loci = 3,
     r = 1,
     s = 0.1,
     k = 0,
     alpha = 0
 )[[1]]
 
-data2 <- simulate(
-    rep = 1,
+data <- list()
+for (i in 1:4) {
+    data[i] <- simulate(
     seed = 1,
-    deterministic = FALSE,
     time = 30,
     dt = 1e-3,
     max_step = 1e-3,
@@ -87,12 +85,15 @@ data2 <- simulate(
     m1 = 3e-9,
     init_W = 1e8,
     init_M = 0,
-    num_mutants = 10,
+    # num_mutants = 10,
+    loci = 3,
     r = 2.1,
     s = 0.1,
     k = 1e9,
     alpha = 1
 )[[1]]
+}
+data2 <- 
 
 dynamics <- function(data, part) {
     # Filter data to include only non-zero mutants and remove "N"
@@ -106,7 +107,7 @@ dynamics <- function(data, part) {
 
     # Create plot
     p <- ggplot(non_zero_data, aes(x = time, y = value, color = variable)) +
-    geom_line(size = 1.5) +  # Set line thickness here
+    geom_line(linewidth = 1.5) +
     scale_color_manual(values = colors) +
     scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
         breaks = 10^seq(0, 9),
@@ -134,64 +135,7 @@ pdf("wahl/figs/dynamics.pdf", width = 20, height = 10)
 grid.arrange(dynamics(data1, "A"), dynamics(data2, "B"), ncol = 2)
 dev.off()
 
-
 ### fig optimality
-
-# Probability a new mutant at the beginning of a growth phase will go extinct
-phi <- function(D, s) {
-    return(ifelse(D == 1, 1 / (1 + s), (1 - D) / (D ^ -s - D)))
-}
-
-# Hypergeometric function
-hyper <- function(s, z) {
-    return(Re(hypergeo(1, 1 / (1 + s), 1 + 1 / (1 + s), z)))
-}
-
-# theoretical rate function
-theory <- function(D, r, s) {
-    return(-r / log(D) * (hyper(s, (1 - D) / (D * (D ^ s - 1))) -
-        D * hyper(s, (1 - D) * (D ^ s) /  (D ^ s - 1))))
-}
-
-# Approximate rate function
-approx1_theory <- function(D, r, s) {
-    return(r * s * log(D^-1) / (D^-1 -1))
-}
-
-# Even more approximate rate function
-approx2_theory <- function(D, r, s) {
-    return(r * s * sqrt(D))
-}
-
-# evaluate a set of simulation results
-metric <- function(data) {
-    # extract the mutation rate and population size
-    m1 <- data[[2]]$m1
-    N0 <- data[[2]]$N0
-    # find the time just after the last bottleneck
-    endpoint <- data[[1]] %>%
-        filter(variable == "W", rep == 1) %>%
-        filter(value - lag(value) < 0) %>%
-        tail(1) %>%
-        pull(time)
-    # find the likelihood of a new mutation at t=0 going extinct 
-    current_phi <- phi(data[[2]]$D, s)
-    # count the number of each mutant at the endpoint
-    final_counts <- data[[1]] %>%
-        group_by(rep, variable) %>%
-        filter(time == endpoint, !(variable %in% c("W", "N"))) %>%
-        summarise(final_value = value, .groups = "keep") %>%
-        mutate(p_fix = 1 - current_phi ^ final_value)
-    # estimate the number of these mutations that will go on to fix
-    fixed <- final_counts %>%
-        group_by(rep) %>%
-        summarise(n = sum(final_value > 1e1), n_hat = sum(p_fix))
-    # estimate the fixation rate and store this
-    fixation_rate <- fixed$n_hat / endpoint / (N0 * m1)
-    se <- sd(fixation_rate) / sqrt(length(fixation_rate))
-    ci <- mean(fixation_rate) + se * qnorm(c(0.5, 0.025, 0.975))
-    return(ci)
-}
 
 s <- 0.1
 
@@ -204,8 +148,8 @@ for (i in seq_len(nrow(summary))) {
     m1 <- summary$m1[i]
     N0 <- 1e9
     data <- simulate(
-        seed = NULL,
-        rep = 2e2,
+        seed = i,
+        rep = 1e3,
         time = 100,
         dt = 1e-1,
         tau = - log(D),
@@ -228,6 +172,7 @@ save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconst
 
 # resource constrained
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
+summary$tau <- - log(summary$D)
 summary$m1 <- summary$D ^ - 0.5 * 1e-9
 data <- list()
 for (i in seq_len(nrow(summary))) {
@@ -235,7 +180,7 @@ for (i in seq_len(nrow(summary))) {
     m1 <- summary$m1[i]
     N0 <- 1e9
     data <- simulate(
-        seed = NULL,
+        seed = i,
         rep = 1e3,
         time = 100,
         dt = 1e-1,
@@ -284,7 +229,7 @@ optimal <- function(summary, r, s, part) {
     p <- ggplot() +
     geom_point(data = summary, aes(x = D, y = rate), color = "black", size = 5) +
     geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), color = "black", size = 1) +
-    geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), size = 2) +
+    geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), linewidth = 2) +
     scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
     scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
     scale_x_continuous(trans = scales::log10_trans(),
@@ -295,7 +240,7 @@ optimal <- function(summary, r, s, part) {
         labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(
         x = expression(italic("D")),
-        y = expression("fixation rate (loci hour"^-1*"mu"^-1*"N"^-1*")"),
+        y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")")),
         color = "Model", # This will be the title of the unified legend
         linetype = "Model"
     ) +
@@ -312,8 +257,8 @@ optimal <- function(summary, r, s, part) {
         legend.title = element_text(size = 20),
         legend.text = element_text(size = 20),
         legend.position = "bottom",
-        legend.key.size = unit(2, "cm"), # Adjust this value as needed
-        legend.spacing.x = unit(0.5, "cm"), # Adjust this value as needed
+        legend.key.size = unit(2, "cm"),
+        legend.spacing.x = unit(0.5, "cm"),
         legend.text.align = 0
     )
     return(p)
@@ -330,3 +275,98 @@ pdf("wahl/figs/optimal.pdf", width = 20, height = 10)
 grid.arrange(optimal(summary1, 1, 0.1, "A"),
     optimal(summary2, 1, 0.1, "B"), ncol = 2)
 dev.off()
+
+
+### fig constrained
+
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.4), tau = 24 * 2 ^ - seq(0, 6, by = 1))
+summary <- run_sims(summary, rep = 1e2, r = 2)
+
+# Save the summary to a file
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_constrained.rdata")
+
+p <- ggplot(summary, aes(x = D, y = tau / 24)) +
+    geom_tile(aes(fill = log10(rate))) +
+    scale_x_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-4, 0),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    scale_y_continuous(trans = scales::log2_trans(),
+        breaks = 2^seq(-6, 0),
+        labels = scales::trans_format("log2", scales::math_format(2^.x))) +
+    scale_fill_gradient(low = "white", high = "blue",
+        breaks = pretty_breaks(n = 2), labels = scales::math_format(10^.x)) +
+    labs(x = expression(italic("D")), 
+        y = expression(paste(italic(tau), " (days)")), 
+        fill = "fixation rate") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 30, hjust = 0.5),
+        axis.title = element_text(size = 25),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 25),
+        legend.text = element_text(size = 25),
+        legend.position = "bottom",
+        legend.key.size = unit(2, "cm"),
+        legend.spacing.x = unit(0.5, "cm")
+    )
+
+print(p)
+
+# QQQ make panel B later with more zoomed in view
+
+### fig:tau24
+
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
+summary <- run_sims(summary, rep = 1e2, r = 2)
+
+results_plot(summary)
+
+# Save the summary to a file
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
+
+### fig:k_variation_optimal
+
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), k_ratio = 10 ^ seq(-2, 2, by = 0.5))
+summary$tau <- - log(summary$D)
+summary$k_ratio <- as.factor(round(as.numeric(summary$k_ratio), 3))
+summary <- run_sims(summary, rep = 1e2, r = 2)
+
+# Save the summary to a file
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
+
+results_plot(summary)
+results_plot <- function(summary) {
+    plot <- ggplot(summary) +
+        scale_x_continuous(trans = log10_trans(),
+            breaks = 10^seq(-7, 0),
+            labels = trans_format("log10", math_format(10^.x))) +
+        scale_y_continuous(trans = log10_trans(),
+            breaks = 10^seq(-7, 0),
+            labels = trans_format("log10", math_format(10^.x))) +
+        labs(
+            x = expression(italic("D")),
+            y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")"))
+        ) +
+        theme_light() +
+        theme(
+            axis.title = element_text(size = 25),
+            axis.text = element_text(size = 25)
+        )
+    
+    if("k_ratio" %in% names(summary)){
+        plot <- plot +
+            geom_point(aes(x = D, y = rate, color = k_ratio), size = 5) +
+            geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio), size = 1) +
+            scale_color_discrete() +
+            theme(legend.title = element_text(size = 20),
+                legend.text = element_text(size = 20),
+                legend.position = "bottom"
+            )
+    } else {
+        plot <- plot +
+            geom_point(aes(x = D, y = rate), size = 5) +
+            geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), size = 1)
+    }
+
+    return(plot)
+}
