@@ -43,10 +43,10 @@ summary <- expand.grid(dose_rep = seq(1, 24, 1), kappa = seq(1, 1, 0.1))
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[i]] <- simulate(
-    init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0),
-    N0 = 1e10,
-    k = 1e8,
-    supply = 1e10,
+    init = c(S = 1e9, R1 = 0, R2 = 0, R12 = 0),
+    N0 = 1e5,
+    k = 1e6,
+    supply = 1e8,
     mu = 1.6 * c(1, 0.9, 0.9, 0.8),
     phi1 = 2,
     phi2 = 2,
@@ -62,7 +62,7 @@ for (i in seq_len(nrow(summary))) {
     kappa1 = summary$kappa[i],
     kappa2 = summary$kappa[i],
 )
-# log_plot(data[[4]][[1]], use = c("S", "R1"))
+log_plot(data[[i]][[1]], use = c("S", "R1", "R2", "R12", "N"))
 print(i / nrow(summary))
 }
 
