@@ -1,12 +1,12 @@
 # Generate and analyse data
-run_sims <- function(summary, rep = 1, s = 0.1, r = 1, loci = 3, res = TRUE, k = FALSE) {
+run_sims <- function(summary, rep = 1, s = 0.1, r = 1, loci = 3, res = TRUE) {
     summary$m1 <- ((summary$D ^ - 1) - 1) / log(summary$D ^ -1) * 1e-9
     data <- list()
     for (i in seq_len(nrow(summary))) {
         D <- summary$D[i]
         m1 <- summary$m1[i]
         tau <- summary$tau[i]
-        k_ratio <- ifelse(k, summary$k_ratio[i], 1)
+        k_ratio <- res * ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
         N0 <- 1e9
         data <- simulate(
             seed = i,
@@ -17,9 +17,9 @@ run_sims <- function(summary, rep = 1, s = 0.1, r = 1, loci = 3, res = TRUE, k =
             max_step = Inf,
             D = D,
             N0 = N0,
-            k = N0 * k_ratio * res,
+            k = N0 * k_ratio,
             alpha = 1 * res,
-            r = 1.023 * r,
+            r = 1.023 * r * (1 + k_ratio), # Adaptivetau step size causes observed growth rate to be lower than expected
             s = s,
             m1 = m1,
             init_W = round(N0 * D),
@@ -69,7 +69,7 @@ metric_old <- function(data) {
         filter(value - lag(value) < 0) %>%
         tail(1) %>%
         pull(time)
-    # find the likelihood of a new mutation at t=0 going extinct 
+    # find the likelihood of a new mutation at t=0 going extinct
     current_phi <- phi(data[[2]]$D, s)
     # count the number of each mutant at the endpoint
     final_counts <- data[[1]] %>%
@@ -109,7 +109,7 @@ metric <- function(data) {
     for (i in 1:loci) {
         final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
     }
-    # Calculate the abundance and probability  for each mutation
+    # Calculate the abundance of each mutation
     counts <- final %>%
         pivot_longer(
             cols = starts_with("M"),
@@ -125,4 +125,30 @@ metric <- function(data) {
     # Note the inverse cdf of the exponential distribution is -log(1-F(x))/lambda
     fixation_rate <- - log(vec) / (endpoint * wt_max * m1 / loci)
     return(fixation_rate)
+}
+
+mutation_time <- function(data) {
+    # Assuming final_counts and mutation_times have been computed as before...
+    joint_data <- final_counts %>%
+        inner_join(mutation_times, by = c("rep", "variable"))
+
+    # Extract your data and corresponding probabilities
+    X <- joint_data$last_zero
+    P <- joint_data$p_fix
+
+    # Normalize the weights
+    weights <- P / sum(P)
+
+    # Load the necessary library
+    library(KernSmooth)
+
+    # Calculate bandwidth using Wand's rule
+    bw <- dpik(X, weights=weights)
+
+    # Compute the density estimate
+    kde <- bkde(X, weight=weights, bandwidth=bw)
+
+    # Plot the KDE
+    p <- plot(kde, main='Kernel Density Estimate of Mutation Times')
+    return(p)
 }

@@ -74,7 +74,8 @@ data1 <- simulate(
 
 data <- list()
 for (i in 1:4) {
-    data[i] <- simulate(
+    k_ratio <- 10 ^ (i - 3)
+    data[[i]] <- simulate(
     seed = 1,
     time = 30,
     dt = 1e-3,
@@ -87,13 +88,12 @@ for (i in 1:4) {
     init_M = 0,
     # num_mutants = 10,
     loci = 3,
-    r = 2.1,
+    r = 2 * (k_ratio + 1),
     s = 0.1,
-    k = 1e9,
+    k = k_ratio * 1e9,
     alpha = 1
 )[[1]]
 }
-data2 <- 
 
 dynamics <- function(data, part) {
     # Filter data to include only non-zero mutants and remove "N"
@@ -135,37 +135,22 @@ pdf("wahl/figs/dynamics.pdf", width = 20, height = 10)
 grid.arrange(dynamics(data1, "A"), dynamics(data2, "B"), ncol = 2)
 dev.off()
 
+grid.arrange(
+    dynamics(data[[1]], "A"),
+    dynamics(data[[2]], "B"),
+    dynamics(data[[3]], "C"),
+    dynamics(data[[4]], "D"),
+    ncol = 2
+)
+
+
 ### fig optimality
 
-s <- 0.1
-
 # resource unconstrained
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
-summary$m1 <- summary$D ^ - 0.5 * 1e-9
-data <- list()
-for (i in seq_len(nrow(summary))) {
-    D <- summary$D[i]
-    m1 <- summary$m1[i]
-    N0 <- 1e9
-    data <- simulate(
-        seed = i,
-        rep = 1e3,
-        time = 100,
-        dt = 1e-1,
-        tau = - log(D),
-        max_step = Inf,
-        D = D,
-        N0 = N0,
-        k = 0,
-        alpha = 0,
-        r = 1.023,
-        s = s,
-        init_W = round(N0 * D),
-        num_mutants = 1e2
-    )
-    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data)
-    print(i / nrow(summary))
-}
+summary <- expand.grid(D = 10 ^ - seq(0.1, 1, by = 0.1))
+summary$tau <- - log(summary$D)
+summary <- run_sims(summary, rep = 1e3, res = FALSE)
+optimal(summary, 1, 0.1, "")
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
@@ -173,31 +158,7 @@ save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconst
 # resource constrained
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
-summary$m1 <- summary$D ^ - 0.5 * 1e-9
-data <- list()
-for (i in seq_len(nrow(summary))) {
-    D <- summary$D[i]
-    m1 <- summary$m1[i]
-    N0 <- 1e9
-    data <- simulate(
-        seed = i,
-        rep = 1e3,
-        time = 100,
-        dt = 1e-1,
-        tau = - log(D),
-        max_step = Inf,
-        D = D,
-        N0 = N0,
-        k = N0,
-        alpha = 1,
-        r = 1.023 * 4,
-        s = s,
-        init_W = round(N0 * D),
-        num_mutants = 1e2
-    )
-    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data)
-    print(i / nrow(summary))
-}
+summary <- run_sims(summary, rep = 1e3, res = TRUE, r = 2)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
@@ -263,7 +224,7 @@ optimal <- function(summary, r, s, part) {
     )
     return(p)
 }
-optimal(summary2, 0.5, 0.1, 1)
+
 
 # load the saved file
 load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
@@ -284,6 +245,7 @@ summary <- run_sims(summary, rep = 1e2, r = 2)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_constrained.rdata")
+load("C:/Users/s4528540/Downloads/results/fig_constrained.rdata")
 
 p <- ggplot(summary, aes(x = D, y = tau / 24)) +
     geom_tile(aes(fill = log10(rate))) +
@@ -323,16 +285,18 @@ results_plot(summary)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
+load("C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
 
 ### fig:k_variation_optimal
 
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), k_ratio = 10 ^ seq(-2, 2, by = 0.5))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
 summary$k_ratio <- as.factor(round(as.numeric(summary$k_ratio), 3))
 summary <- run_sims(summary, rep = 1e2, r = 2)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
+load("C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
 
 results_plot(summary)
 results_plot <- function(summary) {
@@ -370,3 +334,50 @@ results_plot <- function(summary) {
 
     return(plot)
 }
+
+
+### fig:s_distribution
+
+### fig:t_distribution
+
+### fig:fixes
+
+r <- 1
+s <- 0.1
+summary <- expand.grid(D = 10 ^ - seq(0.01, 4, by = 0.01), div_tau = c(FALSE, TRUE))
+summary$tau <- -log(summary$D) / r
+summary <- with(summary, {
+    summary$det_poi <- 2 * s * D * (log(D)^2) / (tau ^ div_tau)
+    summary$det_bin <- D * (1 - phi(D, s)) * (tau ^ !div_tau)
+    summary$sto_poi <- D * (1 - D ^ s) * (tau ^ !div_tau)
+    summary$sto_bin <- theory(D, r, s) * (tau ^ !div_tau)
+    return(summary)
+})
+
+# pivot longer
+summary <- summary %>%
+    pivot_longer(cols = !c("D", "div_tau", "tau"), names_to = "model", values_to = "rate")
+
+ggplot(summary) +
+    geom_line(aes(x = D, y = rate, color = model, linetype = div_tau), linewidth = 2) +
+    scale_x_continuous(trans = log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = trans_format("log10", math_format(10^.x))) +
+    scale_y_continuous(trans = log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = trans_format("log10", math_format(10^.x))) +
+    scale_linetype_manual(values = c("dotted", "solid")) +
+    labs(
+        x = expression(italic("D")),
+        y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")")),
+        color = "model",
+        linetype = expression(paste("optimizing for ", italic(tau)))
+    ) +
+    theme_light() +
+    theme(
+        axis.title = element_text(size = 25),
+        axis.text = element_text(size = 25),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom"
+    )
