@@ -84,7 +84,8 @@ single_run <- function(config, x) {
         times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
         new <- ode(state, times, ode_rates, config)
       } else {
-        if (is.numeric(seed)) set.seed(seed + t) # set the seed for reproducibility
+        # set the seed for reproducibility
+        if (is.numeric(seed)) set.seed(seed + x * time + t)
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
           tl.params = list(maxtau = max_step),
@@ -158,6 +159,7 @@ simulate <- function(
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
+  set.seed(seed) # set the seed for reproducibility
   solutions <- bind_rows(future_lapply(1:rep, function(x) {
     single_run(config, x)},
     future.seed = TRUE))
