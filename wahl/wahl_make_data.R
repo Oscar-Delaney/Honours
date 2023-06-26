@@ -112,12 +112,41 @@ metric2 <- function(data) {
     return(ci)
 }
 
-metric2(data[[1]])
+metric3 <- function(data) {
+    # extract some relevant parameters
+    m1 <- data[[2]]$m1
+    wt_max <- data[[2]]$init_W / data[[2]]$D
+    loci <- data[[2]]$loci
+    time <- data[[2]]$time
+    # find the number of each genotype at the endpoint
+    final <- data[[1]] %>%
+        filter(time == time, variable != "N")
+    # Note which mutatiosn each genotype has
+    for (i in 1:loci) {
+        final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
+    }
+    # Calculate the abundance and probability  for each mutation
+    counts <- final %>%
+        pivot_longer(
+            cols = starts_with("M"),
+            names_to = "Mutant",
+            values_to = "Mutant_value"
+        ) %>%
+        group_by(rep, Mutant) %>%
+        summarise(p = sum(value * Mutant_value) / sum(value), .groups = "keep")
+    # estimate the fixation rate and store this
+    se <- sd(counts$p) / sqrt(length(counts$p))
+    mean <- mean(counts$p)
+    vec <- mean + se * qnorm(c(0.5, 0.025, 0.975))
+    return(vec) # / (time * wt_max * m1 / loci))
+}
+
+metric3(data)
 summary <- metric(summary, data2)
 summary$theory <- theory(summary$D, r, s)
 summary$approx <- approx_theory(summary$D, r, s)
 
-log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 4 & data[[1]][[1]]$time > 0, ])
+log_plot(data[[2]][[1]][data[[1]][[1]]$rep == 5 & data[[1]][[1]]$time > 0, ])
 
 data[[1]][[1]] %>%
     filter(rep == 1, variable == "W") %>%
@@ -162,12 +191,12 @@ summary
 
 # Wahl 2 Constant resource concentration in dilution media
 s <- 0.1
-time <- 100
+time <- 1e3
 N0 <- 1e9
 k_ratio <- 1e0
-r <- 1 * (k_ratio + 1)
-summary <- expand.grid(D = 10 ^ - seq(0.1, 1, by = 0.02))
-summary$tau <- 24
+r <- 2 * (k_ratio + 1)
+summary <- expand.grid(D = 10 ^ - seq(0.1, 1, by = 0.2))
+summary$tau <- - log(summary$D)
 summary$m1 <- summary$D ^ - 0.5 * 1e-9
 data <- list()
 for (i in seq_len(nrow(summary))) {
@@ -176,9 +205,9 @@ for (i in seq_len(nrow(summary))) {
     m1 <- summary$m1[i]
     k <- k_ratio * N0
     if (D >= exp(-r * tau)) {
-        data[[i]] <- simulate(
+        data[[1]] <- simulate(
             seed = NULL,
-            rep = 5e2,
+            rep = 1e3,
             time = time,
             dt = 1e-1,
             tau = tau,
@@ -190,13 +219,17 @@ for (i in seq_len(nrow(summary))) {
             r = r,
             s = s,
             init_W = round(N0 * D),
-            num_mutants = 2e1
+            loci = 4
+            # num_mutants = 2e1
         )
-        summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
+        summary[i, c("rate", "ci_lower", "ci_upper")] <- metric3(data[[1]])
     }
     print(i / nrow(summary))
 }
 
+for (i in seq_len(nrow(summary))) {
+    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric3(data[[i]])
+}
 # Wahl 3 Constant total resource supply per time
 summary <- data.frame(D = 10 ^ - seq(0.05, 4, by = 0.2))
 # summary$D <- exp(-summary$tau)
@@ -226,9 +259,9 @@ ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
     # geom_line() +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper)) +
-    geom_line(aes(y = theory, color = "full")) +
-    geom_line(aes(y = approx, color = "approx")) +
-    scale_color_manual(values = c("full" = "red", "approx" = "blue")) +
+    # geom_line(aes(y = theory, color = "full")) +
+    # geom_line(aes(y = approx, color = "approx")) +
+    # scale_color_manual(values = c("full" = "red", "approx" = "blue")) +
     theme_light() +
     scale_x_log10() +
     scale_y_log10() +
@@ -236,8 +269,8 @@ ggplot(summary, aes(x = D, y = rate)) +
     labs(
         # title = "Optimal Dilution Ratio (resource unconstrained)",
         x = "D",
-        y = "fixation rate (loci per hour per (mutations per generation))",
-        color = "theory"
+        y = "average beneficial mutant frequency after 1000 hours",
+        # color = "theory"
     ) +
     theme(
         plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
