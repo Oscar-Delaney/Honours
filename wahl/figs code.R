@@ -6,31 +6,58 @@ library(scico)
 library(gridExtra)
 
 
+base_plot <- function(summary) {
+    plot <- ggplot(summary) +
+        scale_x_continuous(trans = log10_trans(),
+            breaks = 10^seq(-7, 0),
+            labels = trans_format("log10", math_format(10^.x))) +
+        scale_y_continuous(trans = log10_trans(),
+            breaks = 10^seq(-7, 0),
+            labels = trans_format("log10", math_format(10^.x))) +
+        labs(
+            x = expression(italic("D")),
+            y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")"))
+        ) +
+        theme_light() +
+        theme(
+            axis.title = element_text(size = 25),
+            axis.text = element_text(size = 25)
+        )
+    return(plot)
+}
+
 ### fig:binomial
+# define parameters
 D <- 0.9
 s <- 0.1
 N <- 1e8
 rep <- 1e6
 set.seed(0)
-m <- 1 + rgeom(rep, D ^ (1 + s))
-b <- rbinom(rep, m, D)
-b2 <- rbinom(rep, N*D, D ^ -(1 + s) / N)
 
-# Estimate the PMF of 'b'
-pmf_b <- table(b) / rep
-pmf_b2 <- table(b2) / rep
+# define a tibble with the source and pmf values
+pmfs <- tibble(
+  source = rep(c("det_poi", "det_bin", "sto_poi", "sto_bin"), each = rep),
+  value = c(
+    rpois(rep, D^-s),
+    {e <- D^-(1 + s); f <- floor(e);
+        rbinom(rep, f, D) + rbinom(rep, 1, (e - f) * D)},
+    {m <- 1 + rgeom(rep, D ^ (1 + s)); rpois(rep, m)},
+    {m <- 1 + rgeom(rep, D ^ (1 + s)); rbinom(rep, m, D)}
+  )
+) %>%
+  group_by(source, value) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(pmf = n / sum(n))
 
-# Create a dataframe for plotting
-df <- data.frame(value = as.numeric(names(pmf_b)), pmf_b = as.numeric(pmf_b),
-                 pmf_b2 = as.numeric(pmf_b2[names(pmf_b)]))
-label <- c("Present Analysis", "Wahl et al., 2002")
+label <- c("det_poi", "det_bin", "sto_poi", "sto_bin")
+shapes <- 15:18  # example shapes for 4 sources
+
 # Plot the PMFs
 pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
-ggplot(df, aes(x = value)) +
-  geom_point(aes(y = pmf_b, colour = label[1], shape = label[1]), size = 5) +
-  geom_point(aes(y = pmf_b2, colour = label[2], shape = label[2]), size = 5) +
-  scale_color_manual(values = setNames(scico(2, palette = "roma"), label)) +
-  scale_shape_manual(values = setNames(c(19, 17), label)) +
+ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
+  geom_point(size = 5) +
+  scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
+  scale_shape_manual(values = setNames(shapes, label)) +
   theme_light() +
   scale_y_continuous(trans = scales::log10_trans(),
         breaks = 10^seq(-7, 0),
@@ -41,7 +68,6 @@ ggplot(df, aes(x = value)) +
     colour = NULL,
     shape = NULL
   ) +
-  guides(colour = guide_legend(override.aes = list(shape = c(19, 17)))) +
   theme(
     plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
     axis.title = element_text(size = 25, face = "bold"),
@@ -50,6 +76,7 @@ ggplot(df, aes(x = value)) +
     legend.text = element_text(size = 20),
     legend.position = "bottom"
   )
+
 dev.off()
 
 ### fig dynamics
@@ -281,7 +308,9 @@ print(p)
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
 summary <- run_sims(summary, rep = 1e2, r = 2)
 
-results_plot(summary)
+plot <- base_plot(summary) +
+    geom_point(aes(x = D, y = rate), size = 5) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), size = 1)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
@@ -298,45 +327,29 @@ summary <- run_sims(summary, rep = 1e2, r = 2)
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
 load("C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
 
-results_plot(summary)
-results_plot <- function(summary) {
-    plot <- ggplot(summary) +
-        scale_x_continuous(trans = log10_trans(),
-            breaks = 10^seq(-7, 0),
-            labels = trans_format("log10", math_format(10^.x))) +
-        scale_y_continuous(trans = log10_trans(),
-            breaks = 10^seq(-7, 0),
-            labels = trans_format("log10", math_format(10^.x))) +
-        labs(
-            x = expression(italic("D")),
-            y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")"))
-        ) +
-        theme_light() +
-        theme(
-            axis.title = element_text(size = 25),
-            axis.text = element_text(size = 25)
-        )
-    
-    if("k_ratio" %in% names(summary)){
-        plot <- plot +
-            geom_point(aes(x = D, y = rate, color = k_ratio), size = 5) +
-            geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio), size = 1) +
-            scale_color_discrete() +
-            theme(legend.title = element_text(size = 20),
-                legend.text = element_text(size = 20),
-                legend.position = "bottom"
-            )
-    } else {
-        plot <- plot +
-            geom_point(aes(x = D, y = rate), size = 5) +
-            geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), size = 1)
-    }
-
-    return(plot)
-}
+plot <- base_plot(summary) +
+    geom_point(aes(x = D, y = rate, color = k_ratio), size = 5) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio), size = 1) +
+    scale_color_discrete() +
+    theme(legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20),
+        legend.position = "bottom"
+    )
 
 
 ### fig:s_distribution
+
+summary1 <- expand.grid(D = 5 * 10 ^ - (1:4))
+summary1$tau <- - log(summary1$D)
+summary2 <- summary1
+summary1 <- run_sims(summary1, rep = 1e1, res = FALSE, func = s_dist)
+summary1$res <- FALSE
+summary2 <- run_sims(summary2, rep = 1e1, res = TRUE, r = 2, func = s_dist)
+summary2$res <- TRUE
+summary <- rbind(summary1, summary2)
+
+plot <- base_plot(summary)
+
 
 ### fig:t_distribution
 
