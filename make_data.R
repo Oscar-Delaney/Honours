@@ -38,7 +38,7 @@ sols <- data[[12]][[1]]
 log_plot(sols[sols$rep <=10,])
 
 # Create a grid of parameter combinations
-summary <- expand.grid(dose_rep = seq(1, 24, 1), kappa = seq(1, 1, 0.1))
+summary <- expand.grid(dose_rep = seq(1, 12, 1), kappa = seq(0.5, 3, 0.5))
 
 data <- list()
 for (i in seq_len(nrow(summary))) {
@@ -47,12 +47,13 @@ for (i in seq_len(nrow(summary))) {
     N0 = 1e5,
     k = 1e6,
     supply = 1e8,
-    mu = 1.6 * c(1, 0.9, 0.9, 0.8),
-    phi1 = 2,
-    phi2 = 2,
+    mu = 2 * c(1, 0.9, 0.9, 0.8),
+    phi1 = 2.4,
+    phi2 = 2.4,
     time = 60,
     tau = 1e4,
-    rep = 1e3,
+    max_step = 1e-1,
+    rep = 2e2,
     HGT = 0,
     dose_rep = summary$dose_rep[i],
     dose_gap = 12 / summary$dose_rep[i],
@@ -62,26 +63,38 @@ for (i in seq_len(nrow(summary))) {
     kappa1 = summary$kappa[i],
     kappa2 = summary$kappa[i],
 )
-log_plot(data[[i]][[1]], use = c("S", "R1", "R2", "R12", "N"))
 print(i / nrow(summary))
 }
-
+summary
+log_plot(data[[24]][[1]][data[[1]][[1]]$rep >= 0, ], )
+sol <- data[[1]][[1]][data[[1]][[1]]$rep == 43, ]
+sol2 <- sol[sol$variable =="S" & sol$time <= 15,]
+plot(sol2$time, sol2$value, type = "l")
+single_run(config, 1)[, c("time", "S", "N", "A1", "A2")]
+sol
 # Calculate the summary statistics
 for (i in seq_len(nrow(summary))) {
-    summary$wins[i] <- mean(final_pop(data[[i]][[1]], c("R1", "R2")) > 1e3)
+    summary$wins[i] <- mean(final_pop(data[[i]][[1]], c("R1", "R2")) > 1e2)
     rep <- data[[i]][[2]]$rep
     ci <- binom.test(summary$wins[i] * rep, rep, conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
 }
 
+for (i in seq_len(nrow(summary))) {
+    pops <- total_pop(data[[i]][[1]], strains = "S")
+    summary$pop[i] <- mean(pops)
+    ci <- t.test(pops, conf.level = 0.95)$conf.int
+    summary$ymin[i] <- ci[1]
+    summary$ymax[i] <- ci[2]
+}
 # plot with one independent variable and one dependent variable
 ggplot(summary, aes(x = dose_rep, y = wins)) +
     geom_point(size = 3) +
     geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
     theme_light() +
     # scale_x_log10() +
-    scale_y_continuous(limits = c(0,1)) +
+    # scale_y_continuous(limits = c(0,1)) +
     labs(
         title = "Resistance Evolution",
         x = "Number of doses per day",
@@ -138,9 +151,9 @@ ggplot(summary, aes(x = D, y = HGT, color = wins)) +
     )
 
 ggplot(summary, aes(x = dose_rep, y = kappa)) +
-    geom_tile(aes(fill = wins)) +
-    scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1)) +
-    labs(x = "doses per day", y = "kappa", fill = "proportion",
+    geom_tile(aes(fill = log10(wins))) +
+    scale_fill_gradient(low = "white", high = "blue") +
+    labs(x = "doses per day", y = "kappa", fill = "log10(P(MDR))",
             title = "Hill shape parameter interacts with dosing frequency",
             subtitle = "proportion of runs where MDR becomes established") +
     theme_minimal() +
@@ -150,7 +163,9 @@ ggplot(summary, aes(x = dose_rep, y = kappa)) +
         axis.title = element_text(size = 25, face = "bold"),
         axis.text = element_text(size = 25),
         legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20)
+        legend.text = element_text(size = 20),
+        legend.position = "bottom",
+        legend.key.width = unit(2, "cm")
     )
 
 
