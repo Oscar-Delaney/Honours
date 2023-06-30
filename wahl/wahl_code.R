@@ -77,6 +77,7 @@ single_run <- function(config, x) {
     transitions <- make_transitions(num_mutants)
     # Initialise the state variables
     state <- init
+    config$r_vec <- mutant_fitness(num_mutants, r, s, names)
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     bottlenecks <- unique(round(c(seq(0, time, tau), time), 10))
     for (t in bottlenecks[-length(bottlenecks)]) {
@@ -91,7 +92,7 @@ single_run <- function(config, x) {
         new <- ode(state, times, ode_rates, config)
       } else {
         # set the seed for reproducibility
-        if (is.numeric(seed)) set.seed(seed + x * time + t)
+        if (is.numeric(seed)) set.seed(round(seed + (x * time + t) / tau))
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
           tl.params = list(maxtau = max_step),
@@ -143,7 +144,6 @@ simulate <- function(
   names <- c("W", paste0("M", 1:num_mutants))
   # count <- 0 # number of mutants that have arisen
   init <- setNames(c(init_W, rep(init_M, num_mutants), N0), c(names, "N"))
-  r_vec <- mutant_fitness(num_mutants, r, s, names)
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
