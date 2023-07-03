@@ -26,59 +26,6 @@ base_plot <- function(summary) {
     return(plot)
 }
 
-### fig:binomial
-# define parameters
-D <- 0.9
-s <- 0.1
-N <- 1e8
-rep <- 1e6
-set.seed(0)
-
-# define a tibble with the source and pmf values
-pmfs <- tibble(
-  source = rep(c("det_poi", "det_bin", "sto_poi", "sto_bin"), each = rep),
-  value = c(
-    rpois(rep, D^-s),
-    {e <- D^-(1 + s); f <- floor(e);
-        rbinom(rep, f, D) + rbinom(rep, 1, (e - f) * D)},
-    {m <- 1 + rgeom(rep, D ^ (1 + s)); rpois(rep, m)},
-    {m <- 1 + rgeom(rep, D ^ (1 + s)); rbinom(rep, m, D)}
-  )
-) %>%
-  group_by(source, value) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  mutate(pmf = n / sum(n))
-
-label <- c("det_poi", "det_bin", "sto_poi", "sto_bin")
-shapes <- 15:18  # example shapes for 4 sources
-
-# Plot the PMFs
-pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
-ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
-#   xlim(-0.2, 7.2) +
-  geom_jitter(size = 5, width = 0.2, height = 0) +
-  scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
-  scale_shape_manual(values = setNames(shapes, label)) +
-  theme_light() +
-  scale_x_continuous(breaks = 0:7, limits = c(-0.2, 7.2)) +
-  scale_y_continuous(trans = scales::log10_trans(),
-        breaks = 10^seq(-7, 0),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-  labs(
-    x = expression(paste("mutants remaining after bottlenecking, ", italic(M(tau^"+")))),
-    y = "probability mass",
-    colour = NULL,
-    shape = NULL
-  ) +
-  theme(
-    axis.title = element_text(size = 25),
-    axis.text = element_text(size = 25),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    legend.position = "bottom"
-  )
-dev.off()
-
 ### fig dynamics
 data1 <- simulate(
     seed = 1,
@@ -270,7 +217,10 @@ p <- ggplot(summary, aes(x = D, y = tau / 24)) +
         legend.spacing.x = unit(0.5, "cm")
     )
 
-print(p)
+# print as pdf
+pdf("wahl/figs/constrained.pdf", width = 10, height = 10)
+p
+dev.off()
 
 ### fig:tau24
 
@@ -288,7 +238,8 @@ dev.off()
 
 ### fig:k_variation_optimal
 
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), k_ratio = 10 ^ seq(-2, 1, by = 1))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1),
+    k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
 summary$k_ratio <- as.factor(round(as.numeric(summary$k_ratio), 3))
 summary <- run_sims(summary, rep = 1e3, r = 2)
@@ -317,33 +268,153 @@ base_plot(summary) +
     )
 dev.off()
 
-### fig:s_distribution
-
-summary1 <- expand.grid(D = 5 * 10 ^ - (1:4))
-summary1$tau <- - log(summary1$D)
-summary2 <- summary1
-summary1 <- run_sims(summary1, rep = 1e1, res = FALSE, func = s_dist)
-summary1$res <- FALSE
-summary2 <- run_sims(summary2, rep = 1e1, res = TRUE, r = 2, func = s_dist)
-summary2$res <- TRUE
-summary <- rbind(summary1, summary2)
-
-plot <- base_plot(summary)
-
 
 ### fig:t_distribution
+D <- 10^-0.1
+r <- 1
+s <- 0.1
+data <- simulate(seed = 1, time = 50, rep = 1e3, dt = 1e-2, max_step = 1e-2,
+    D = D,  s = s, tau = -log(D), N0 = 1e9, init_W = round(1e9 * D),
+    m1 = 1e-8, k = 0, alpha = 0, r = r, num_mutants = 1e2)
+final_counts <- fixed(data)[[1]]
+
+mutation_times <- data[[1]] %>%
+    filter(value == 0) %>%
+    group_by(rep, variable) %>%
+    summarise(last_zero = max(time)  %% data[[2]]$tau, .groups = "keep")
+t_data <- final_counts %>%
+    inner_join(mutation_times, by = c("rep", "variable"))
+
+# save the data
+save(tt_data, file = "C:/Users/s4528540/Downloads/results/fig_t_distribution.rdata")
+
+t_theory <- data.frame(
+  t = seq(0, data[[2]]$tau, by = 0.001)
+)
+t_theory$rate <- rate_at_t(D, r = r, s = s, t = t_theory$t)
+t_theory$rate <- t_theory$rate / sum(t_theory$rate * 0.001)
+
+# plot the data
+p <- ggplot(t_data, aes(x = last_zero)) +
+  geom_density(aes(y = ..density.., weight = p_fix), adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
+  geom_line(data = t_theory, aes(x = t, y = rate, color = "theory")) +
+  scale_color_manual(name = NULL, values = c("theory" = "blue")) +
+  labs(
+    x = expression(italic(t)),
+    y = "probability density"
+  ) +
+  theme_minimal() + 
+  theme(
+    axis.title = element_text(size = 25),
+    axis.text = element_text(size = 25),
+    legend.position = "bottom",
+    legend.text = element_text(size = 25),
+  )
+
+pdf("wahl/figs/t_distribution.pdf", width = 10, height = 10)
+p
+dev.off()
+
+### fig:s_distribution
+data <- simulate(seed = 1, time = 50, rep = 1e3, dt = 1e-1, max_step = Inf,
+    D = D,  s = s, tau = -log(D), N0 = 1e9, init_W = round(1e9 * D),
+    m1 = 1e-8, k = 0, alpha = 0, r = r * 1.023, num_mutants = 1e2)
+final_counts <- fixed(data)[[1]]
+s_data <- final_counts %>%
+    inner_join(data[[2]]$s_all, by = c("rep", "variable"))
+# save the data
+save(s_data, file = "C:/Users/s4528540/Downloads/results/fig_s_distribution.rdata")
+
+s_theory <- data.frame(
+  s = seq(0, 1, by = 0.001)
+)
+s_theory$fix <- s_theory$s * exp(-s_theory$s / s) / s^2
+s_theory$arise <- exp(-s_theory$s / s) / s
+
+# plot the data
+p <- ggplot(s_data, aes(x = value)) +
+  geom_density(aes(y = ..density.., weight = p_fix), adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
+  geom_line(data = s_theory, aes(x = s, y = fix, color = "fixing")) +
+  geom_line(data = s_theory, aes(x = s, y = arise, color = "arising")) +
+  scale_color_manual(name = "mutations", values = c("fixing" = "blue", "arising" = "red")) +
+  labs(
+    x = expression(italic(t)),
+    y = "probability density"
+  ) +
+  theme_minimal() + 
+  theme(
+    axis.title = element_text(size = 25),
+    axis.text = element_text(size = 25),
+    legend.position = "bottom",
+    legend.text = element_text(size = 25),
+    legend.title = element_text(size = 25)
+  )
+
+pdf("wahl/figs/s_distribution.pdf", width = 10, height = 10)
+p
+dev.off()
+
+### fig:binomial
+# define parameters
+D <- 0.9
+N <- 1e8
+rep <- 1e6
+label <- c("det_poi", "det_bin", "sto_poi", "sto_bin")
+shapes <- 15:18
+set.seed(0)
+
+# define a tibble with the source and pmf values
+pmfs <- tibble(
+  source = rep(c( "det_bin", "det_poi", "sto_bin", "sto_poi"), each = rep),
+  value = c(
+    {e <- D^-(1 + s); f <- floor(e);
+        rbinom(rep, f, D) + rbinom(rep, 1, (e - f) * D)},
+    rpois(rep, D^-s),
+    {m <- 1 + rgeom(rep, D ^ (1 + s)); rbinom(rep, m, D)},
+    {m <- 1 + rgeom(rep, D ^ (1 + s)); rpois(rep, m)}
+  )
+) %>%
+  group_by(source, value) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(pmf = n / sum(n))
+
+# Plot the PMFs
+pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
+ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
+#   xlim(-0.2, 7.2) +
+  geom_jitter(size = 5, width = 0.2, height = 0) +
+  scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
+  scale_shape_manual(values = setNames(shapes, label)) +
+  theme_light() +
+  scale_x_continuous(breaks = 0:7, limits = c(-0.2, 7.2)) +
+  scale_y_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  labs(
+    x = expression(paste("mutants remaining after bottlenecking, ", italic(M(tau^"+")))),
+    y = "probability mass",
+    colour = NULL,
+    shape = NULL
+  ) +
+  theme(
+    axis.title = element_text(size = 25),
+    axis.text = element_text(size = 25),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    legend.position = "bottom"
+  )
+dev.off()
+
 
 ### fig:methodology
 
-r <- 1
-s <- 0.1
 summary <- expand.grid(D = 10 ^ - seq(0.01, 4, by = 0.01), div_tau = c(FALSE, TRUE))
 summary$tau <- -log(summary$D) / r
 summary <- with(summary, {
-    summary$det_poi <- 2 * s * D * (log(D)^2) / (tau ^ div_tau)
     summary$det_bin <- D * (1 - phi(D, s)) * (tau ^ !div_tau)
-    summary$sto_poi <- D * (1 - D ^ s) * (tau ^ !div_tau)
+    summary$det_poi <- 2 * s * D * (log(D)^2) / (tau ^ div_tau)
     summary$sto_bin <- theory(D, r, s) * (tau ^ !div_tau)
+    summary$sto_poi <- D * (1 - D ^ s) * (tau ^ !div_tau)
     return(summary)
 })
 
@@ -351,20 +422,26 @@ summary <- with(summary, {
 summary <- summary %>%
     pivot_longer(cols = !c("D", "div_tau", "tau"), names_to = "model", values_to = "rate")
 
+p <- 
 ggplot(summary) +
-    geom_line(aes(x = D, y = rate, color = model, linetype = div_tau), linewidth = 2) +
+    geom_line(aes(x = D, y = rate, color = model, linetype = div_tau), linewidth = 1) +
     scale_x_continuous(trans = log10_trans(),
         breaks = 10^seq(-7, 0),
         labels = trans_format("log10", math_format(10^.x))) +
     scale_y_continuous(trans = log10_trans(),
         breaks = 10^seq(-7, 0),
         labels = trans_format("log10", math_format(10^.x))) +
+    scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
     scale_linetype_manual(values = c("dotted", "solid")) +
     labs(
         x = expression(italic("D")),
         y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")")),
         color = "model",
         linetype = expression(paste("optimizing for ", italic(tau)))
+    ) +
+    guides(
+        color = guide_legend(nrow = 2),     # 2 rows for color legend
+        linetype = guide_legend(nrow = 2)   # 1 row for linetype legend
     ) +
     theme_light() +
     theme(
@@ -374,6 +451,10 @@ ggplot(summary) +
         legend.text = element_text(size = 20),
         legend.position = "bottom"
     )
+
+pdf("wahl/figs/methodology.pdf", width = 10, height = 10)
+p
+dev.off()
 
 ### fig:ci
 
