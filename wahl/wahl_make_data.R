@@ -429,3 +429,43 @@ for (i in seq_len(nrow(summary))) {
 }
 summary
 log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 1, ])
+
+
+# evaluate a set of simulation results
+metric_ci_old <- function(data) {
+    # extract some relevant parameters
+    m1 <- data[[2]]$m1
+    wt_max <- data[[2]]$init_W / data[[2]]$D
+    wt <- data[[2]]$names[1]
+    loci <- data[[2]]$loci
+    current_phi <- phi(data[[2]]$D, data[[2]]$s)
+    # find the time just after the last bottleneck
+    endpoint <- data[[1]] %>%
+        filter(variable == wt, rep == 1) %>%
+        filter(value - lag(value) < 0) %>%
+        tail(1) %>%
+        pull(time)
+    # find the number of each genotype at the endpoint
+    final <- data[[1]] %>%
+        filter(time == endpoint, variable != "N")
+    # Note which mutations each genotype has
+    for (i in 1:loci) {
+        final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
+    }
+    # Calculate the abundance of each mutation
+    counts <- final %>%
+        pivot_longer(
+            cols = starts_with("M"),
+            names_to = "Mutant",
+            values_to = "Mutant_value"
+        ) %>%
+        group_by(rep, Mutant) %>%
+        summarise(final_value = sum(value * Mutant_value), .groups = "keep")
+    # estimate the fixation rate and store this
+    mean <- mean(current_phi ^ counts$final_value)
+    ci <- binom.test(x = round(nrow(counts) * c(mean, 1 - mean)))$conf.int
+    vec <- c(mean, rev(ci))
+    # Note the inverse cdf of the exponential distribution is -log(1-F(x))/lambda
+    fixation_rate <- - log(vec) / (endpoint * wt_max * m1 / loci)
+    return(fixation_rate)
+}
