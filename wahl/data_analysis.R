@@ -34,30 +34,6 @@ run_sims <- function(summary, rep = 1, time = 50, s = 0.1, r = 1, res = TRUE, fu
     return(summary)
 }
 
-# Create your data frame
-df <- data.frame(
-  id = c(1, 2, 3),
-  x = c(1, 2, 3)
-)
-# Let's say we want to assign a list to the first row of column z
-df$z <- vector("list", nrow(df)) # create a list column of the same length as the data frame
-df$z[[1]] <- 1:10 # assign a list to the first cell
-
-
-# Create your list of lists
-list_of_lists <- list(seq(1,10), seq(11,20), seq(21,30))
-
-# Assign the list to a new column
-df$y <- list_of_lists
-
-# Print the data frame
-print(df)
-
-print(df)
-
-s_dist <- function(data) {
-    return(list(list("A", "B", "C"), list("A", "B", "C"), 2))
-}
 
 # Probability a new mutant at the beginning of a growth phase will go extinct
 phi <- function(D, s) {
@@ -85,8 +61,13 @@ approx2_theory <- function(D, r, s) {
     return(r * s * sqrt(D))
 }
 
-# evaluate a set of simulation results
-metric <- function(data) {
+# rate at a given time within [0, tau)
+rate_at_t <- function(D, r, s, t) {
+  (D * (-1 + D^s) * exp(r * t) * r) / (-1 + D^(1 + s) * exp(r * (1 + s) * t) - D^s * (-1 + exp(r * (1 + s) * t)))
+}
+
+# Count the number of mutants likely en route to fixation
+fixed <- function(data) {
     # find the time just after the last bottleneck
     endpoint <- data[[1]] %>%
         filter(variable == "W", rep == 1) %>%
@@ -101,6 +82,14 @@ metric <- function(data) {
         filter(time == endpoint, !(variable %in% c("W", "N"))) %>%
         summarise(final_value = value, .groups = "keep") %>%
         mutate(p_fix = 1 - current_phi ^ final_value)
+    return(list(final_counts, endpoint))
+}
+
+# evaluate a set of simulation results
+metric <- function(data) {
+    input <- fixed(data)
+    final_counts <- input[[1]]
+    endpoint <- input[[2]]
     # estimate the number of these mutations that will go on to fix
     fixed <- final_counts %>%
         group_by(rep) %>%
@@ -113,45 +102,6 @@ metric <- function(data) {
     return(ci)
 }
 
-# evaluate a set of simulation results
-metric_ci_old <- function(data) {
-    # extract some relevant parameters
-    m1 <- data[[2]]$m1
-    wt_max <- data[[2]]$init_W / data[[2]]$D
-    wt <- data[[2]]$names[1]
-    loci <- data[[2]]$loci
-    current_phi <- phi(data[[2]]$D, data[[2]]$s)
-    # find the time just after the last bottleneck
-    endpoint <- data[[1]] %>%
-        filter(variable == wt, rep == 1) %>%
-        filter(value - lag(value) < 0) %>%
-        tail(1) %>%
-        pull(time)
-    # find the number of each genotype at the endpoint
-    final <- data[[1]] %>%
-        filter(time == endpoint, variable != "N")
-    # Note which mutations each genotype has
-    for (i in 1:loci) {
-        final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
-    }
-    # Calculate the abundance of each mutation
-    counts <- final %>%
-        pivot_longer(
-            cols = starts_with("M"),
-            names_to = "Mutant",
-            values_to = "Mutant_value"
-        ) %>%
-        group_by(rep, Mutant) %>%
-        summarise(final_value = sum(value * Mutant_value), .groups = "keep")
-    # estimate the fixation rate and store this
-    mean <- mean(current_phi ^ counts$final_value)
-    ci <- binom.test(x = round(nrow(counts) * c(mean, 1 - mean)))$conf.int
-    vec <- c(mean, rev(ci))
-    # Note the inverse cdf of the exponential distribution is -log(1-F(x))/lambda
-    fixation_rate <- - log(vec) / (endpoint * wt_max * m1 / loci)
-    return(fixation_rate)
-}
-
 metric_ci <- function(data) {
     # extract some relevant parameters
     m1 <- data[[2]]$m1
@@ -161,7 +111,7 @@ metric_ci <- function(data) {
     # find the number of each genotype at the endpoint
     final <- data[[1]] %>%
         filter(time == time, variable != "N")
-    # Note which mutatiosn each genotype has
+    # Note which mutations each genotype has
     for (i in 1:loci) {
         final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
     }
@@ -179,34 +129,4 @@ metric_ci <- function(data) {
     mean <- mean(counts$p)
     vec <- mean + se * qnorm(c(0.5, 0.025, 0.975))
     return(vec)
-}
-
-mutation_time <- function(data) {
-    # Assuming final_counts and mutation_times have been computed as before...
-    joint_data <- final_counts %>%
-        inner_join(mutation_times, by = c("rep", "variable"))
-
-    # Extract your data and corresponding probabilities
-    X <- joint_data$last_zero
-    P <- joint_data$p_fix
-
-    # Normalize the weights
-    weights <- P / sum(P)
-
-    # Load the necessary library
-    library(KernSmooth)
-
-    # Calculate bandwidth using Wand's rule
-    bw <- dpik(X, weights=weights)
-
-    # Compute the density estimate
-    kde <- bkde(X, weight=weights, bandwidth=bw)
-
-    # Plot the KDE
-    p <- plot(kde, main='Kernel Density Estimate of Mutation Times')
-    return(p)
-}
-
-s_dist <- function(data) {
-    
 }
