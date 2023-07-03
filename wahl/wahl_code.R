@@ -116,6 +116,9 @@ single_run <- function(config, x) {
       setNames(approx_vars, colnames(solution)),
       rep = x
     )
+    # add a new row at the end with the r_vec
+    solution_interpolated[nrow(solution_interpolated) + 1, ] <-
+      c("s", (config$r_vec / r) - 1, 0, x)
     return(solution_interpolated)
   })
 }
@@ -153,6 +156,8 @@ simulate <- function(
     future.seed = TRUE))
   # Convert the solutions to long format
   long <- pivot_longer(solutions, cols = -c(time, rep), names_to = "variable")
+  config$s_all <- long %>% filter(time == "s") %>% select(-time)
+  long <- long[long$time != "s", ]
   return(list(long, config))
 }
 
