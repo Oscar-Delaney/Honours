@@ -146,7 +146,7 @@ summary <- metric(summary, data2)
 summary$theory <- theory(summary$D, r, s)
 summary$approx <- approx_theory(summary$D, r, s)
 
-log_plot(data[[2]][[1]][data[[1]][[1]]$rep == 5 & data[[1]][[1]]$time > 0, ])
+log_plot(data[[5]][[1]][data[[1]][[1]]$rep <= 10 & data[[1]][[1]]$time > 0, ])
 
 data[[1]][[1]] %>%
     filter(rep == 1, variable == "W") %>%
@@ -192,12 +192,12 @@ summary
 # Wahl 2 Constant resource concentration in dilution media
 s <- 0.1
 time <- 1e3
-N0 <- 1e9
+N0 <- 1e8
 k_ratio <- 1e0
 r <- 2 * (k_ratio + 1)
-summary <- expand.grid(D = 10 ^ - seq(0.1, 1, by = 0.2))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
-summary$m1 <- summary$D ^ - 0.5 * 1e-9
+summary$m1 <- 1e-8
 data <- list()
 for (i in seq_len(nrow(summary))) {
     D <- summary$D[i]
@@ -207,7 +207,7 @@ for (i in seq_len(nrow(summary))) {
     if (D >= exp(-r * tau)) {
         data[[1]] <- simulate(
             seed = NULL,
-            rep = 1e3,
+            rep = 1e2,
             time = time,
             dt = 1e-1,
             tau = tau,
@@ -226,6 +226,11 @@ for (i in seq_len(nrow(summary))) {
     }
     print(i / nrow(summary))
 }
+summary
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_ci.rdata")
+
+# print the current time
+print(Sys.time())
 
 for (i in seq_len(nrow(summary))) {
     summary[i, c("rate", "ci_lower", "ci_upper")] <- metric3(data[[i]])
@@ -250,11 +255,7 @@ for (i in seq_len(nrow(summary))) {
     )
     print(i/nrow(summary))
 }
-
-summary <- metric(summary, data2)
-summary <- data.frame(D = 10 ^ - seq(0.01, 5, by = 0.01), s = 0.01, r = 0.1)
-summary$approx <- summary$r * summary$s * log(1 / summary$D) / (1 / summary$D - 1)
-# png("images/test.png", width = 12, height = 10, units = "in", res = 300)
+u
 ggplot(summary, aes(x = D, y = rate)) +
     geom_point(size = 3) +
     # geom_line() +
@@ -269,7 +270,7 @@ ggplot(summary, aes(x = D, y = rate)) +
     labs(
         # title = "Optimal Dilution Ratio (resource unconstrained)",
         x = "D",
-        y = "average beneficial mutant frequency after 1000 hours",
+        y = "Average mutation frequency after 1000 hours",
         # color = "theory"
     ) +
     theme(
@@ -394,3 +395,37 @@ ggplot(summary, aes(x = D, y = rate)) +
         legend.text = element_text(size = 20),
         legend.position = "bottom"
     )
+
+
+summary <- expand.grid(D = 10 ^ - seq(0.05, 0.05, by = 0.05), seed = 2)
+summary$tau <- - log(summary$D)
+summary$m1 <- summary$D ^ - 0.5 * 1e-9
+data <- list()
+for (i in seq_len(nrow(summary))) {
+    D <- summary$D[i]
+    m1 <- summary$m1[i]
+    tau <- summary$tau[i]
+    k_ratio <- res * ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
+    N0 <- 1e10
+    data[[i]] <- simulate(
+        seed = summary$seed[i],
+        rep = 1,
+        time = 20,
+        dt = 1e-1,
+        tau = tau,
+        max_step = Inf,
+        D = D,
+        N0 = N0,
+        k = N0 * k_ratio,
+        alpha = 1 * res,
+        r = 1.023 * r * (1 + k_ratio), # Adaptivetau step size causes observed growth rate to be lower than expected
+        s = s,
+        m1 = m1,
+        init_W = round(N0 * D),
+        num_mutants = 1,
+    )
+    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
+    print(i / nrow(summary))
+}
+summary
+log_plot(data[[1]][[1]][data[[1]][[1]]$rep == 1, ])

@@ -55,10 +55,12 @@ shapes <- 15:18  # example shapes for 4 sources
 # Plot the PMFs
 pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
 ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
-  geom_point(size = 5) +
+#   xlim(-0.2, 7.2) +
+  geom_jitter(size = 5, width = 0.2, height = 0) +
   scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
   scale_shape_manual(values = setNames(shapes, label)) +
   theme_light() +
+  scale_x_continuous(breaks = 0:7, limits = c(-0.2, 7.2)) +
   scale_y_continuous(trans = scales::log10_trans(),
         breaks = 10^seq(-7, 0),
         labels = scales::trans_format("log10", scales::math_format(10^.x))) +
@@ -69,14 +71,12 @@ ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
     shape = NULL
   ) +
   theme(
-    plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 25, face = "bold"),
+    axis.title = element_text(size = 25),
     axis.text = element_text(size = 25),
     legend.title = element_text(size = 20),
     legend.text = element_text(size = 20),
     legend.position = "bottom"
   )
-
 dev.off()
 
 ### fig dynamics
@@ -91,8 +91,8 @@ data1 <- simulate(
     m1 = 3e-9,
     init_W = 1e8,
     init_M = 0,
-    # num_mutants = 10,
-    loci = 3,
+    num_mutants = 9,
+    # loci = 3,
     r = 1,
     s = 0.1,
     k = 0,
@@ -103,7 +103,7 @@ data <- list()
 for (i in 1:4) {
     k_ratio <- 10 ^ (i - 3)
     data[[i]] <- simulate(
-    seed = 1,
+    seed = 2,
     time = 30,
     dt = 1e-3,
     max_step = 1e-3,
@@ -113,8 +113,8 @@ for (i in 1:4) {
     m1 = 3e-9,
     init_W = 1e8,
     init_M = 0,
-    # num_mutants = 10,
-    loci = 3,
+    num_mutants = 9,
+    # loci = 3,
     r = 2 * (k_ratio + 1),
     s = 0.1,
     k = k_ratio * 1e9,
@@ -131,6 +131,7 @@ dynamics <- function(data, part) {
     # Define colors using scico
     unique_vars <- unique(non_zero_data$variable)
     colors <- setNames(scico(length(unique_vars), palette = "roma"), unique_vars)
+    colors["W"] <- "black"
 
     # Create plot
     p <- ggplot(non_zero_data, aes(x = time, y = value, color = variable)) +
@@ -158,10 +159,11 @@ dynamics <- function(data, part) {
     return(p)
 }
 # save as pdf
-pdf("wahl/figs/dynamics.pdf", width = 20, height = 10)
-grid.arrange(dynamics(data1, "A"), dynamics(data2, "B"), ncol = 2)
+pdf("wahl/figs/dynamics.pdf", width = 10, height = 10)
+dynamics(data1, "")
 dev.off()
 
+pdf("wahl/figs/dynamics-constrained.pdf", width = 20, height = 20)
 grid.arrange(
     dynamics(data[[1]], "A"),
     dynamics(data[[2]], "B"),
@@ -169,57 +171,43 @@ grid.arrange(
     dynamics(data[[4]], "D"),
     ncol = 2
 )
+dev.off()
 
+### fig:optimal
 
-### fig optimality
-
-# resource unconstrained
-summary <- expand.grid(D = 10 ^ - seq(0.1, 1, by = 0.1))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
-summary <- run_sims(summary, rep = 1e3, res = FALSE)
-optimal(summary, 1, 0.1, "")
+summary <- run_sims(summary, rep = 1e3, r = 1, s = 0.1, res = FALSE)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
 
-# resource constrained
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
-summary$tau <- - log(summary$D)
-summary <- run_sims(summary, rep = 1e3, res = TRUE, r = 2)
-
-# Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+# save as pdf
+pdf("wahl/figs/optimal.pdf", width = 10, height = 10)
+optimal(summary, r = 1, s = 0.1, "")
+dev.off()
 
 optimal <- function(summary, r, s, part) {
-    # Define linetypes for the theory lines
-    linetype_palette <- c("theory" = "solid", "approx1" = "dotted", "wahl1" = "solid", "wahl2" = "dotted")
-
-    # Define a palette for the theory lines
-    color_palette <- c("theory" = scico(2, palette = "vik")[1], 
-                    "approx1" = scico(2, palette = "vik")[1], 
-                    "wahl1" = scico(2, palette = "vik")[2], 
-                    "wahl2" = scico(2, palette = "vik")[2])
-
+    # Define linetypes and palettes for theory lines
+    labels <- c("theory", "approximation")
+    linetype_palette <- setNames(c("solid", "dashed"), labels)
+    color_palette <- setNames(scico(2, palette = "vik"), labels)
+    
     # Define theory data
     theory_long <- pivot_longer(data.frame(
-    D = summary$D,
-    theory = theory(summary$D, r, s),
-    approx1 = approx1_theory(summary$D, r, s),
-    wahl1 = 2 * s * summary$D * (log(summary$D) ^ 2),
-    wahl2 = 2 * s * summary$D * -log(summary$D)
-    ), cols = -D, names_to = "variable", values_to = "value")
-
-    # Adjust the levels of variable to match the order in color_palette and linetype_palette
-    theory_long$variable <- factor(theory_long$variable, levels = names(color_palette))
-
+        D = summary$D,
+        theory = theory(summary$D, r, s),
+        approximation = approx1_theory(summary$D, r, s)
+        ),
+    cols = -D, names_to = "variable", values_to = "value")
 
     # Plotting
     p <- ggplot() +
-    geom_point(data = summary, aes(x = D, y = rate), color = "black", size = 5) +
-    geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), color = "black", size = 1) +
-    geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), linewidth = 2) +
-    scale_color_manual(values = color_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
-    scale_linetype_manual(values = linetype_palette, labels = c("Theory", "Approximation", "Wahl original", "Wahl updated")) +
+    geom_point(data = summary, aes(x = D, y = rate), size = 3) +
+    geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
+    geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), linewidth = 1) +
+    scale_color_manual(values = color_palette) +
+    scale_linetype_manual(values = linetype_palette) +
     scale_x_continuous(trans = scales::log10_trans(),
         breaks = 10^seq(-7, 0),
         labels = scales::trans_format("log10", scales::math_format(10^.x))) +
@@ -229,12 +217,8 @@ optimal <- function(summary, r, s, part) {
     labs(
         x = expression(italic("D")),
         y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")")),
-        color = "Model", # This will be the title of the unified legend
+        color = "Model",
         linetype = "Model"
-    ) +
-    guides(
-        color = guide_legend(override.aes = list(linetype = rep(c("solid", "dotted"), 2)), ncol = 2),
-        linetype = "none"
     ) +
     annotate("text", x = 1e-4, y = 1e-1, size = 15,
            label = part, fontface = "bold", hjust = 0, vjust = 1) +
@@ -245,29 +229,16 @@ optimal <- function(summary, r, s, part) {
         legend.title = element_text(size = 20),
         legend.text = element_text(size = 20),
         legend.position = "bottom",
-        legend.key.size = unit(2, "cm"),
+        legend.key.size = unit(3, "cm"),
         legend.spacing.x = unit(0.5, "cm"),
         legend.text.align = 0
     )
     return(p)
 }
 
-
-# load the saved file
-load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
-summary1 <- summary
-load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
-summary2 <- summary
-# save as pdf
-pdf("wahl/figs/optimal.pdf", width = 20, height = 10)
-grid.arrange(optimal(summary1, 1, 0.1, "A"),
-    optimal(summary2, 1, 0.1, "B"), ncol = 2)
-dev.off()
-
-
 ### fig constrained
 
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.4), tau = 24 * 2 ^ - seq(0, 6, by = 1))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
 summary <- run_sims(summary, rep = 1e2, r = 2)
 
 # Save the summary to a file
@@ -301,41 +272,50 @@ p <- ggplot(summary, aes(x = D, y = tau / 24)) +
 
 print(p)
 
-# QQQ make panel B later with more zoomed in view
-
 ### fig:tau24
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
-summary <- run_sims(summary, rep = 1e2, r = 2)
-
-plot <- base_plot(summary) +
-    geom_point(aes(x = D, y = rate), size = 5) +
-    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), size = 1)
+summary <- run_sims(summary, rep = 1e3, r = 2, res = TRUE)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
-load("C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
+
+pdf("wahl/figs/tau24.pdf", width = 10, height = 10)
+base_plot(summary) +
+    geom_point(aes(x = D, y = rate), size = 3) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8)
+dev.off()
 
 ### fig:k_variation_optimal
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
 summary$k_ratio <- as.factor(round(as.numeric(summary$k_ratio), 3))
-summary <- run_sims(summary, rep = 1e2, r = 2)
+summary <- run_sims(summary, rep = 1e3, r = 2)
+theory_data <- data.frame(
+    D = unique(summary$D),
+    rate = theory(unique(summary$D), r = 1, s = 0.1),
+    theory = "unconstrained"
+)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
 load("C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
 
-plot <- base_plot(summary) +
-    geom_point(aes(x = D, y = rate, color = k_ratio), size = 5) +
-    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio), size = 1) +
-    scale_color_discrete() +
+pdf("wahl/figs/k_variation_optimal.pdf", width = 10, height = 10)
+base_plot(summary) +
+    geom_point(aes(x = D, y = rate, color = k_ratio), size = 3) +
+    geom_line(aes(x = D, y = rate, color = k_ratio), size = 1) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio),
+        linewidth = 0.8) +
+    geom_line(data = theory_data, aes(x = D, y = rate, linetype = theory), size = 1) +
+    scale_color_scico_d(palette = "roma") +
+    scale_linetype_manual(values = c("unconstrained" = "dashed")) +
     theme(legend.title = element_text(size = 20),
         legend.text = element_text(size = 20),
         legend.position = "bottom"
     )
-
+dev.off()
 
 ### fig:s_distribution
 
@@ -353,7 +333,7 @@ plot <- base_plot(summary)
 
 ### fig:t_distribution
 
-### fig:fixes
+### fig:methodology
 
 r <- 1
 s <- 0.1
@@ -394,3 +374,79 @@ ggplot(summary) +
         legend.text = element_text(size = 20),
         legend.position = "bottom"
     )
+
+### fig:ci
+
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
+summary$tau <- - log(summary$D)
+data <- list()
+for (i in seq_len(nrow(summary))) {
+    D <- summary$D[i]
+    tau <- summary$tau[i]
+    if (D >= exp(-r * tau)) {
+        data[[1]] <- simulate(
+            seed = NULL,
+            rep = 1e2,
+            time = 1e3,
+            dt = 1e-1,
+            tau = tau,
+            D = D,
+            N0 = 1e8,
+            m1 = 1e-8,
+            k = 1e8,
+            alpha = 1,
+            r = 4,
+            s = 0.1,
+            init_W = round(1e8 * D),
+            loci = 4
+        )
+        summary[i, c("rate", "ci_lower", "ci_upper")] <- metric3(data[[1]])
+    }
+    print(i / nrow(summary))
+}
+
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_ci.rdata")
+
+pdf("wahl/figs/ci.pdf", width = 10, height = 10)
+ggplot(summary, aes(x = D, y = rate)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), size = 1) +
+    theme_light() +
+    scale_x_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-7, 0),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    scale_y_continuous(trans = scales::log10_trans(),
+        breaks = 10^seq(-7, 0, 0.5),
+        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    labs(
+        x = expression(italic("D")),
+        y = "Average mutation frequency after 1000 hours",
+    ) +
+    theme(
+        axis.title = element_text(size = 25),
+        axis.text = element_text(size = 25)
+        )
+dev.off()
+
+
+### unused
+
+# resource constrained
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
+summary$tau <- - log(summary$D)
+summary <- run_sims(summary, rep = 1e3, res = TRUE, r = 2)
+
+# Save the summary to a file
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+
+
+# load the saved file
+load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
+summary1 <- summary
+load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+summary2 <- summary
+# save as pdf
+pdf("wahl/figs/optimal.pdf", width = 10, height = 10)
+grid.arrange(optimal(summary1, 1, 0.1, "A"),
+    optimal(summary2, 1, 0.1, "B"), ncol = 2)
+dev.off()
