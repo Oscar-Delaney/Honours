@@ -24,7 +24,8 @@ base_plot <- function(summary) {
             labels = trans_format("log10", math_format(10^.x))) +
         labs(
             x = expression(italic("D")),
-            y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")"))
+            y = expression(paste("fixation rate (loci hour"^"-1" ~
+                italic(mu)^-1 ~ italic(N)^-1 * ")"))
         ) +
         theme_light() +
         custom_theme
@@ -73,8 +74,8 @@ constrained <- function(summary) {
             labels = scales::trans_format("log2", scales::math_format(2^.x))) +
         scale_fill_gradient(low = "white", high = "blue",
             breaks = pretty_breaks(n = 2), labels = scales::math_format(10^.x)) +
-        labs(x = expression(italic("D")), 
-            y = expression(paste(italic(tau), " (days)")), 
+        labs(x = expression(italic("D")),
+            y = expression(paste(italic(tau), " (days)")),
             fill = "fixation rate") +
         theme_minimal() +
         custom_theme
@@ -256,7 +257,8 @@ t_theory$rate <- t_theory$rate / sum(t_theory$rate * 0.001)
 # save the plot
 pdf("wahl/figs/t_distribution.pdf", width = 10, height = 10)
 ggplot(t_data, aes(x = last_zero)) +
-  geom_density(aes(y = ..density.., weight = p_fix), adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
+  geom_density(aes(y = ..density.., weight = p_fix),
+    adjust = 1 / 2, fill = "grey", alpha = 1, bw = 0.01) +
   geom_line(data = t_theory, aes(x = t, y = rate, color = "theory")) +
   scale_color_manual(name = NULL, values = c("theory" = "blue")) +
   labs(
@@ -286,10 +288,11 @@ ggplot(s_data, aes(x = value)) +
   # raise p_fix to a high power to ensure mutations actually very likely to fix
   # are the ones that dominate the distribution
   geom_density(aes(y = ..density.., weight = p_fix ^ 20),
-    adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
+    adjust = 1 / 2, fill = "grey", alpha = 1, bw = 0.01) +
   geom_line(data = s_theory, aes(x = s, y = fix, color = "fixing")) +
   geom_line(data = s_theory, aes(x = s, y = arise, color = "arising")) +
-  scale_color_manual(name = "mutations", values = c("fixing" = "blue", "arising" = "red")) +
+  scale_color_manual(name = "mutations",
+    values = c("fixing" = "blue", "arising" = "red")) +
   labs(
     x = expression(italic(t)),
     y = "probability density"
@@ -312,13 +315,16 @@ set.seed(0)
 
 # define a tibble with the source and pmf values
 pmfs <- tibble(
-  source = rep(c( "det_bin", "det_poi", "sto_bin", "sto_poi"), each = rep),
+  source = rep(c("det_bin", "det_poi", "sto_bin", "sto_poi"), each = rep),
   value = c(
-    {e <- D^-(1 + s); f <- floor(e);
-        rbinom(rep, f, D) + rbinom(rep, 1, (e - f) * D)},
+    {e <- D^-(1 + s)
+    f <- floor(e)
+    rbinom(rep, f, D) + rbinom(rep, 1, (e - f) * D)},
     rpois(rep, D^-s),
-    {m <- 1 + rgeom(rep, D ^ (1 + s)); rbinom(rep, m, D)},
-    {m <- 1 + rgeom(rep, D ^ (1 + s)); rpois(rep, m)}
+    {m <- 1 + rgeom(rep, D ^ (1 + s))
+    rbinom(rep, m, D)},
+    {m <- 1 + rgeom(rep, D ^ (1 + s))
+    rpois(rep, m)}
   )
 ) %>%
   group_by(source, value) %>%
@@ -337,7 +343,8 @@ ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
         breaks = 10^seq(-7, 0),
         labels = scales::trans_format("log10", scales::math_format(10^.x))) +
   labs(
-    x = expression(paste("mutants remaining after bottlenecking, ", italic(M(tau^"+")))),
+    x = expression(paste("mutants remaining after bottlenecking, ",
+        italic(M(tau^"+")))),
     y = "probability mass",
     colour = NULL,
     shape = NULL
@@ -348,7 +355,7 @@ dev.off()
 
 ### fig:methodology
 
-summary <- expand.grid(D = 10 ^ - seq(0.01, 4, by = 0.01), div_tau = c(FALSE, TRUE))
+summary <- expand.grid(D = 10 ^ - seq(0.01, 4, 0.01), div_tau = c(FALSE, TRUE))
 summary$tau <- -log(summary$D) / r
 summary <- with(summary, {
     summary$det_bin <- D * (1 - phi(D, w)) * (tau ^ !div_tau)
@@ -360,7 +367,8 @@ summary <- with(summary, {
 
 # pivot longer
 summary <- summary %>%
-    pivot_longer(cols = !c("D", "div_tau", "tau"), names_to = "model", values_to = "rate")
+    pivot_longer(cols = !c("D", "div_tau", "tau"),
+        names_to = "model", values_to = "rate")
 
 # save the plot
 pdf("wahl/figs/methodology.pdf", width = 10, height = 10)
@@ -385,7 +393,7 @@ save(summary, file = "C:/Users/s4528540/Downloads/results/fig_ci.rdata")
 # save the plot
 pdf("wahl/figs/ci.pdf", width = 10, height = 10)
 base_plot(summary) +
-    labs(y = "Average mutation frequency",) +
+    labs(y = "Average mutation frequency") +
     geom_point(aes(x = D, y = rate), size = 3) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8)
 dev.off()

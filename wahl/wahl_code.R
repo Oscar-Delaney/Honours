@@ -139,11 +139,11 @@ simulate <- function(
   alpha = 1 # nutrients used per replication
   ) {
   # Define the parameters of the model
-  if(is.numeric(num_mutants)) {
+  if (is.numeric(num_mutants)) {
     names <- c("W", paste0("M", 1:num_mutants))
   } else {
-      if(is.null(loci)) stop("Must specify num_mutants XOR loci")
-      names <- paste0("G",intToBin(1:2^loci - 1))
+      if (is.null(loci)) stop("Must specify num_mutants XOR loci")
+      names <- paste0("G", intToBin(1:2^loci - 1))
       # Generate all possible binary strings of length loci
       genotypes <- expand.grid(replicate(loci, c(0, 1), simplify = FALSE))
       genotypes <- setNames(rev(genotypes), paste0("M", 1:loci))
@@ -159,7 +159,7 @@ simulate <- function(
         }
       }
   }
-  init <- setNames(c(round(N*D), rep(0, length(names) - 1), R0), c(names, "R"))
+  init <- setNames(c(round(N * D), rep(0, length(names) - 1), R0), c(names, "R"))
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows

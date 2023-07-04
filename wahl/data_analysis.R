@@ -8,7 +8,8 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1,
         D <- summary$D[i]
         mu <- summary$mu[i]
         tau <- summary$tau[i]
-        k_ratio <- res * ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
+        k_ratio <- res *
+            ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
         R0 <- 1e9
         data <- simulate(
             seed = i,
@@ -64,7 +65,8 @@ approx2_theory <- function(D, r, w) {
 
 # rate at a given time within [0, tau)
 rate_at_t <- function(D, r, w, t) {
-  (D * (-1 + D^w) * exp(r * t) * r) / (-1 + D^(1 + w) * exp(r * (1 + w) * t) - D^w * (-1 + exp(r * (1 + w) * t)))
+  (D * (-1 + D^w) * exp(r * t) * r) /
+    (-1 + D^(1 + w) * exp(r * (1 + w) * t) - D^w * (-1 + exp(r * (1 + w) * t)))
 }
 
 # Count the number of mutants likely en route to fixation
@@ -109,7 +111,7 @@ metric_ci <- function(data) {
         filter(time == max(time), variable != "R")
     # Note which mutations each genotype has
     for (i in 1:data[[2]]$loci) {
-        final[[paste0("M", i)]] <- substring(final$variable, i+1, i+1)=="1"
+        final[[paste0("M", i)]] <- substring(final$variable, i + 1, i + 1) == "1"
     }
     # Calculate the abundance and probability for each mutation
     counts <- final %>%
