@@ -1,6 +1,8 @@
 # Generate and analyse data
-run_sims <- function(summary, rep = 1, time = 50, s = 0.1, r = 1, res = TRUE, func = metric) {
-    summary$m1 <- summary$D ^ - 0.5 * 1e-9
+run_sims <- function(summary, rep = 1, time = 50, s = 0.1, r = 1,
+    res = TRUE, num_mutants = 1e2, loci = NULL) {
+    summary$m1 <- 1e-9 * ifelse(is.null(loci), summary$D ^ - 0.5, 1)
+    func <- ifelse(is.null(loci), metric, metric_ci)
     data <- list()
     for (i in seq_len(nrow(summary))) {
         D <- summary$D[i]
@@ -8,27 +10,26 @@ run_sims <- function(summary, rep = 1, time = 50, s = 0.1, r = 1, res = TRUE, fu
         tau <- summary$tau[i]
         k_ratio <- res * ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
         N0 <- 1e9
-        if (D >= exp(-r * (1 + k_ratio) * tau) ) {
-            data <- simulate(
-                seed = i,
-                rep = rep,
-                time = time,
-                dt = 1e-1,
-                tau = tau,
-                max_step = Inf,
-                D = D,
-                N0 = N0,
-                k = N0 * k_ratio,
-                alpha = 1 * res,
-                r = 1.023 * r * (1 + k_ratio), # Adaptivetau step size causes observed growth rate to be lower than expected
-                s = s,
-                m1 = m1,
-                init_W = round(N0 * D),
-                num_mutants = 1e2,
-                # loci = loci,
-            )
-            summary[i, c("rate", "ci_lower", "ci_upper")] <- func(data)
-        }
+        data <- simulate(
+            seed = i,
+            rep = rep,
+            time = time,
+            dt = 1e-1,
+            tau = tau,
+            max_step = Inf,
+            D = D,
+            N0 = N0,
+            k = N0 * k_ratio,
+            alpha = 1 * res,
+            r = 1.023 * r * (1 + k_ratio), # Adaptivetau step size causes
+            # observed growth rate to be lower than expected
+            s = s,
+            m1 = m1,
+            init_W = round(N0 * D),
+            num_mutants = num_mutants,
+            loci = loci,
+        )
+        summary[i, c("rate", "ci_lower", "ci_upper")] <- func(data)
         print(i / nrow(summary))
     }
     return(summary)
