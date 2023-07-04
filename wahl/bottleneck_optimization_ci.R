@@ -4,6 +4,7 @@ library(tidyverse)
 library(ggnewscale)
 library(future)
 library(future.apply)
+library(R.utils)
 
 # a growth rate function for nutrient-limited growth
 monod <- function(N, r, k) {
@@ -42,25 +43,14 @@ make_transitions <- function(names) {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- state[names] * monod(N, r_max, k)
+    replication_rates <- state[names] * monod(N, r_vec, k)
     # Calculate growth rates including mutations
-    growth_rates <- t(replication_rates) %*% mutation_matrix
+    growth_rates <- replication_rates %*% mutation
     # Calculate nutrient depletion rate
     N_depletion <- sum(replication_rates * alpha)
     # Combine all rates and return
     rate_list <- c(growth_rates, N_depletion)
     return(setNames(rate_list, c(names, "N")))
-  })
-}
-
-# a function to convert the transition rates into an ODE function
-ode_rates <- function(t, state, config) {
-  with(as.list(rates(state, config, t)), {
-    return(list(c(
-      W = W_growth,
-      M = M_growth,
-      N = -N_depletion
-      )))
   })
 }
 
@@ -71,7 +61,7 @@ single_run <- function(config, x) {
     transitions <- make_transitions(names)
     # Define the fitness of each genotype
     fitness <- rexp(loci, 1 / s)
-    config$r_max <- r * (1 + as.matrix(genotypes) %*% fitness)
+    config$r_vec <- r * t(1 + as.matrix(genotypes) %*% fitness)
     # Initialise the state variables
     state <- init
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
@@ -143,7 +133,7 @@ simulate <- function(
   genotypes <- expand.grid(replicate(loci, c(0, 1), simplify = FALSE))
   genotypes <- setNames(rev(genotypes), paste0("M", 1:loci))
   # Initialize the mutation matrix
-  mutation_matrix <- diag(1 - m1, 2 ^ loci)
+  mutation <- diag(1 - m1, 2 ^ loci)
   # Loop over all genotypes
   for (i in 1:2^loci) {
     for (j in 1:2^loci) {
@@ -152,7 +142,7 @@ simulate <- function(
       # hamming_distance <- sum(strsplit(names[i], "")[[1]] != strsplit(names[j], "")[[1]])
       # If the Hamming distance is 1, set the mutation rate
       if (hamming_distance == 1) {
-        mutation_matrix[i, j] <- m1 / loci
+        mutation[i, j] <- m1 / loci
       }
     }
   }
@@ -244,5 +234,5 @@ log_plot <- function(solutions, type = "all") {
   print(plot)
 }
 
-system.time(log_plot(simulate(loci = 4)[[1]]))
+system.time(log_plot(simulate(loci = 3)[[1]]))
 # simulate(deterministic = TRUE)[[1]]$value[3001:3003]
