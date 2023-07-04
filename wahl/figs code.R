@@ -5,6 +5,14 @@ library(scales)
 library(scico)
 library(gridExtra)
 
+custom_theme <- theme(
+    axis.title = element_text(size = 25),
+    axis.text = element_text(size = 25),
+    legend.position = "bottom",
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    legend.key.size = unit(1, "cm"),
+  )
 
 base_plot <- function(summary) {
     plot <- ggplot(summary) +
@@ -19,54 +27,8 @@ base_plot <- function(summary) {
             y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")"))
         ) +
         theme_light() +
-        theme(
-            axis.title = element_text(size = 25),
-            axis.text = element_text(size = 25)
-        )
+        custom_theme
     return(plot)
-}
-
-### fig dynamics
-data1 <- simulate(
-    seed = 1,
-    time = 30,
-    dt = 1e-3,
-    max_step = 1e-3,
-    tau = log(10),
-    D = 0.1,
-    N0 = 1e9,
-    m1 = 3e-9,
-    init_W = 1e8,
-    init_M = 0,
-    num_mutants = 9,
-    # loci = 3,
-    r = 1,
-    s = 0.1,
-    k = 0,
-    alpha = 0
-)[[1]]
-
-data <- list()
-for (i in 1:4) {
-    k_ratio <- 10 ^ (i - 3)
-    data[[i]] <- simulate(
-    seed = 2,
-    time = 30,
-    dt = 1e-3,
-    max_step = 1e-3,
-    tau = log(10),
-    D = 0.1,
-    N0 = 1e9,
-    m1 = 3e-9,
-    init_W = 1e8,
-    init_M = 0,
-    num_mutants = 9,
-    # loci = 3,
-    r = 2 * (k_ratio + 1),
-    s = 0.1,
-    k = k_ratio * 1e9,
-    alpha = 1
-)[[1]]
 }
 
 dynamics <- function(data, part) {
@@ -82,34 +44,91 @@ dynamics <- function(data, part) {
 
     # Create plot
     p <- ggplot(non_zero_data, aes(x = time, y = value, color = variable)) +
-    geom_line(linewidth = 1.5) +
-    scale_color_manual(values = colors) +
-    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-        breaks = 10^seq(0, 9),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    labs(
-        x = "time (hours)",
-        y = "population size",
-        color = "Strain",
-        fill = "Strain"
-    ) +
-    annotate("text", x = 0, y = 3e9, size = 15,
-           label = part, fontface = "bold", hjust = 0.1, vjust = 0.3) +
-    theme_light() +
-    theme(
-        axis.title = element_text(size = 25),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom"
-    )
+        geom_line(linewidth = 1.5) +
+        scale_color_manual(values = colors) +
+        scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+            breaks = 10^seq(0, 9),
+            labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+        labs(
+            x = "time (hours)",
+            y = "population size",
+            color = "Strain",
+            fill = "Strain"
+        ) +
+        annotate("text", x = 0, y = 3e9, size = 15,
+            label = part, fontface = "bold", hjust = 0.1, vjust = 0.3) +
+        theme_light() +
+        custom_theme
     return(p)
 }
-# save as pdf
+
+constrained <- function(summary) {
+    p <- ggplot(summary, aes(x = D, y = tau / 24)) +
+        geom_tile(aes(fill = log10(rate))) +
+        scale_x_continuous(trans = scales::log10_trans(),
+            breaks = 10^seq(-4, 0),
+            labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+        scale_y_continuous(trans = scales::log2_trans(),
+            breaks = 2^seq(-6, 0),
+            labels = scales::trans_format("log2", scales::math_format(2^.x))) +
+        scale_fill_gradient(low = "white", high = "blue",
+            breaks = pretty_breaks(n = 2), labels = scales::math_format(10^.x)) +
+        labs(x = expression(italic("D")), 
+            y = expression(paste(italic(tau), " (days)")), 
+            fill = "fixation rate") +
+        theme_minimal() +
+        custom_theme
+    return(p)
+}
+
+### fig dynamics
+data_unconstrained <- simulate(
+    seed = 1,
+    time = 30,
+    dt = 1e-3,
+    max_step = 1e-3,
+    tau = log(10),
+    D = 0.1,
+    N0 = 1e9,
+    m1 = 3e-9,
+    init_W = 1e8,
+    init_M = 0,
+    num_mutants = 9,
+    r = 1,
+    s = 0.1,
+    k = 0,
+    alpha = 0
+)[[1]]
+
+# save the plot
 pdf("wahl/figs/dynamics.pdf", width = 10, height = 10)
-dynamics(data1, "")
+dynamics(data_unconstrained, "")
 dev.off()
 
+### fig dynamics constrained
+data <- list()
+for (i in 1:4) {
+    k_ratio <- 10 ^ (i - 3)
+    data[[i]] <- simulate(
+    seed = 2,
+    time = 30,
+    dt = 1e-3,
+    max_step = 1e-3,
+    tau = log(10),
+    D = 0.1,
+    N0 = 1e9,
+    m1 = 3e-9,
+    init_W = 1e8,
+    init_M = 0,
+    num_mutants = 9,
+    r = 2 * (k_ratio + 1),
+    s = 0.1,
+    k = k_ratio * 1e9,
+    alpha = 1
+)[[1]]
+}
+
+# save the plot
 pdf("wahl/figs/dynamics-constrained.pdf", width = 20, height = 20)
 grid.arrange(
     dynamics(data[[1]], "A"),
@@ -121,7 +140,6 @@ grid.arrange(
 dev.off()
 
 ### fig:optimal
-
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
 summary <- run_sims(summary, rep = 1e3, r = 1, s = 0.1, res = FALSE)
@@ -129,59 +147,29 @@ summary <- run_sims(summary, rep = 1e3, r = 1, s = 0.1, res = FALSE)
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
 
-# save as pdf
+# Define linetypes and palettes for theory lines
+labels <- c("theory", "approximation")
+linetype_palette <- setNames(c("solid", "dashed"), labels)
+color_palette <- setNames(scico(2, palette = "vik"), labels)
+
+# Define theory data
+theory_long <- pivot_longer(data.frame(
+    D = summary$D,
+    theory = theory(summary$D, r, s),
+    approximation = approx1_theory(summary$D, r, s)
+    ),
+cols = -D, names_to = "variable", values_to = "value")
+
+# save the plot
 pdf("wahl/figs/optimal.pdf", width = 10, height = 10)
-optimal(summary, r = 1, s = 0.1, "")
-dev.off()
-
-optimal <- function(summary, r, s, part) {
-    # Define linetypes and palettes for theory lines
-    labels <- c("theory", "approximation")
-    linetype_palette <- setNames(c("solid", "dashed"), labels)
-    color_palette <- setNames(scico(2, palette = "vik"), labels)
-    
-    # Define theory data
-    theory_long <- pivot_longer(data.frame(
-        D = summary$D,
-        theory = theory(summary$D, r, s),
-        approximation = approx1_theory(summary$D, r, s)
-        ),
-    cols = -D, names_to = "variable", values_to = "value")
-
-    # Plotting
-    p <- ggplot() +
-    geom_point(data = summary, aes(x = D, y = rate), size = 3) +
-    geom_errorbar(data = summary, aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
+base_plot(summary) +
+    geom_point(aes(x = D, y = rate), size = 3) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
     geom_line(data = theory_long, aes(x = D, y = value, color = variable, linetype = variable), linewidth = 1) +
     scale_color_manual(values = color_palette) +
     scale_linetype_manual(values = linetype_palette) +
-    scale_x_continuous(trans = scales::log10_trans(),
-        breaks = 10^seq(-7, 0),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    scale_y_continuous(trans = scales::log10_trans(),
-        breaks = 10^seq(-7, 0),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    labs(
-        x = expression(italic("D")),
-        y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")")),
-        color = "Model",
-        linetype = "Model"
-    ) +
-    annotate("text", x = 1e-4, y = 1e-1, size = 15,
-           label = part, fontface = "bold", hjust = 0, vjust = 1) +
-    theme_light() +
-    theme(
-        axis.title = element_text(size = 25),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom",
-        legend.key.size = unit(3, "cm"),
-        legend.spacing.x = unit(0.5, "cm"),
-        legend.text.align = 0
-    )
-    return(p)
-}
+    labs(color = "Model", linetype = "Model")
+dev.off()
 
 ### fig constrained
 
@@ -190,36 +178,10 @@ summary <- run_sims(summary, rep = 1e2, r = 2)
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_constrained.rdata")
-load("C:/Users/s4528540/Downloads/results/fig_constrained.rdata")
 
-p <- ggplot(summary, aes(x = D, y = tau / 24)) +
-    geom_tile(aes(fill = log10(rate))) +
-    scale_x_continuous(trans = scales::log10_trans(),
-        breaks = 10^seq(-4, 0),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    scale_y_continuous(trans = scales::log2_trans(),
-        breaks = 2^seq(-6, 0),
-        labels = scales::trans_format("log2", scales::math_format(2^.x))) +
-    scale_fill_gradient(low = "white", high = "blue",
-        breaks = pretty_breaks(n = 2), labels = scales::math_format(10^.x)) +
-    labs(x = expression(italic("D")), 
-        y = expression(paste(italic(tau), " (days)")), 
-        fill = "fixation rate") +
-    theme_minimal() +
-    theme(
-        plot.title = element_text(size = 30, hjust = 0.5),
-        axis.title = element_text(size = 25),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 25),
-        legend.text = element_text(size = 25),
-        legend.position = "bottom",
-        legend.key.size = unit(2, "cm"),
-        legend.spacing.x = unit(0.5, "cm")
-    )
-
-# print as pdf
+# save the plot
 pdf("wahl/figs/constrained.pdf", width = 10, height = 10)
-p
+constrained(summary)
 dev.off()
 
 ### fig:tau24
@@ -230,6 +192,7 @@ summary <- run_sims(summary, rep = 1e3, r = 2, res = TRUE)
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
 
+# save the plot
 pdf("wahl/figs/tau24.pdf", width = 10, height = 10)
 base_plot(summary) +
     geom_point(aes(x = D, y = rate), size = 3) +
@@ -242,7 +205,7 @@ summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1),
     k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
 summary$k_ratio <- as.factor(round(as.numeric(summary$k_ratio), 3))
-summary <- run_sims(summary, rep = 1e3, r = 2)
+summary <- run_sims(summary, rep = 1e3, r = 1.2)
 theory_data <- data.frame(
     D = unique(summary$D),
     rate = theory(unique(summary$D), r = 1, s = 0.1),
@@ -251,8 +214,8 @@ theory_data <- data.frame(
 
 # Save the summary to a file
 save(summary, file = "C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
-load("C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
 
+# save the plot
 pdf("wahl/figs/k_variation_optimal.pdf", width = 10, height = 10)
 base_plot(summary) +
     geom_point(aes(x = D, y = rate, color = k_ratio), size = 3) +
@@ -261,11 +224,7 @@ base_plot(summary) +
         linewidth = 0.8) +
     geom_line(data = theory_data, aes(x = D, y = rate, linetype = theory), size = 1) +
     scale_color_scico_d(palette = "roma") +
-    scale_linetype_manual(values = c("unconstrained" = "dashed")) +
-    theme(legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom"
-    )
+    scale_linetype_manual(values = c("unconstrained" = "dashed"))
 dev.off()
 
 
@@ -286,7 +245,7 @@ t_data <- final_counts %>%
     inner_join(mutation_times, by = c("rep", "variable"))
 
 # save the data
-save(tt_data, file = "C:/Users/s4528540/Downloads/results/fig_t_distribution.rdata")
+save(t_data, file = "C:/Users/s4528540/Downloads/results/fig_t_distribution.rdata")
 
 t_theory <- data.frame(
   t = seq(0, data[[2]]$tau, by = 0.001)
@@ -294,8 +253,9 @@ t_theory <- data.frame(
 t_theory$rate <- rate_at_t(D, r = r, s = s, t = t_theory$t)
 t_theory$rate <- t_theory$rate / sum(t_theory$rate * 0.001)
 
-# plot the data
-p <- ggplot(t_data, aes(x = last_zero)) +
+# save the plot
+pdf("wahl/figs/t_distribution.pdf", width = 10, height = 10)
+ggplot(t_data, aes(x = last_zero)) +
   geom_density(aes(y = ..density.., weight = p_fix), adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
   geom_line(data = t_theory, aes(x = t, y = rate, color = "theory")) +
   scale_color_manual(name = NULL, values = c("theory" = "blue")) +
@@ -303,25 +263,14 @@ p <- ggplot(t_data, aes(x = last_zero)) +
     x = expression(italic(t)),
     y = "probability density"
   ) +
-  theme_minimal() + 
-  theme(
-    axis.title = element_text(size = 25),
-    axis.text = element_text(size = 25),
-    legend.position = "bottom",
-    legend.text = element_text(size = 25),
-  )
-
-pdf("wahl/figs/t_distribution.pdf", width = 10, height = 10)
-p
+  theme_minimal() +
+  custom_theme
 dev.off()
 
 ### fig:s_distribution
-data <- simulate(seed = 1, time = 50, rep = 1e3, dt = 1e-1, max_step = Inf,
-    D = D,  s = s, tau = -log(D), N0 = 1e9, init_W = round(1e9 * D),
-    m1 = 1e-8, k = 0, alpha = 0, r = r * 1.023, num_mutants = 1e2)
-final_counts <- fixed(data)[[1]]
 s_data <- final_counts %>%
     inner_join(data[[2]]$s_all, by = c("rep", "variable"))
+
 # save the data
 save(s_data, file = "C:/Users/s4528540/Downloads/results/fig_s_distribution.rdata")
 
@@ -331,9 +280,13 @@ s_theory <- data.frame(
 s_theory$fix <- s_theory$s * exp(-s_theory$s / s) / s^2
 s_theory$arise <- exp(-s_theory$s / s) / s
 
-# plot the data
-p <- ggplot(s_data, aes(x = value)) +
-  geom_density(aes(y = ..density.., weight = p_fix), adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
+# save the plot
+pdf("wahl/figs/s_distribution.pdf", width = 10, height = 10)
+ggplot(s_data, aes(x = value)) +
+  # raise p_fix to a high power to ensure mutations actually very likely to fix
+  # are the ones that dominate the distribution
+  geom_density(aes(y = ..density.., weight = p_fix ^ 20),
+    adjust = 1/2, fill = "grey", alpha = 1, bw = 0.01) +
   geom_line(data = s_theory, aes(x = s, y = fix, color = "fixing")) +
   geom_line(data = s_theory, aes(x = s, y = arise, color = "arising")) +
   scale_color_manual(name = "mutations", values = c("fixing" = "blue", "arising" = "red")) +
@@ -341,18 +294,12 @@ p <- ggplot(s_data, aes(x = value)) +
     x = expression(italic(t)),
     y = "probability density"
   ) +
-  theme_minimal() + 
-  theme(
-    axis.title = element_text(size = 25),
-    axis.text = element_text(size = 25),
-    legend.position = "bottom",
-    legend.text = element_text(size = 25),
-    legend.title = element_text(size = 25)
-  )
-
-pdf("wahl/figs/s_distribution.pdf", width = 10, height = 10)
-p
+  theme_minimal() +
+  custom_theme
 dev.off()
+
+# weighted mean of s for mutations that go onto fix
+weighted.mean(s_data$value, s_data$p_fix ^ 20)
 
 ### fig:binomial
 # define parameters
@@ -378,10 +325,9 @@ pmfs <- tibble(
   summarise(n = n(), .groups = "drop") %>%
   mutate(pmf = n / sum(n))
 
-# Plot the PMFs
+# save the plot
 pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
 ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
-#   xlim(-0.2, 7.2) +
   geom_jitter(size = 5, width = 0.2, height = 0) +
   scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
   scale_shape_manual(values = setNames(shapes, label)) +
@@ -396,13 +342,7 @@ ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
     colour = NULL,
     shape = NULL
   ) +
-  theme(
-    axis.title = element_text(size = 25),
-    axis.text = element_text(size = 25),
-    legend.title = element_text(size = 20),
-    legend.text = element_text(size = 20),
-    legend.position = "bottom"
-  )
+  custom_theme
 dev.off()
 
 
@@ -422,112 +362,30 @@ summary <- with(summary, {
 summary <- summary %>%
     pivot_longer(cols = !c("D", "div_tau", "tau"), names_to = "model", values_to = "rate")
 
-p <- 
-ggplot(summary) +
+# save the plot
+pdf("wahl/figs/methodology.pdf", width = 10, height = 10)
+base_plot(summary) +
     geom_line(aes(x = D, y = rate, color = model, linetype = div_tau), linewidth = 1) +
-    scale_x_continuous(trans = log10_trans(),
-        breaks = 10^seq(-7, 0),
-        labels = trans_format("log10", math_format(10^.x))) +
-    scale_y_continuous(trans = log10_trans(),
-        breaks = 10^seq(-7, 0),
-        labels = trans_format("log10", math_format(10^.x))) +
     scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
     scale_linetype_manual(values = c("dotted", "solid")) +
-    labs(
-        x = expression(italic("D")),
-        y = expression(paste("fixation rate (loci hour"^"-1" ~ italic(mu)^-1 ~ italic(N)^-1*")")),
-        color = "model",
-        linetype = expression(paste("optimizing for ", italic(tau)))
-    ) +
-    guides(
-        color = guide_legend(nrow = 2),     # 2 rows for color legend
-        linetype = guide_legend(nrow = 2)   # 1 row for linetype legend
-    ) +
-    theme_light() +
-    theme(
-        axis.title = element_text(size = 25),
-        axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom"
-    )
-
-pdf("wahl/figs/methodology.pdf", width = 10, height = 10)
-p
+    labs(color = "model", linetype = "time-optimized") +
+    guides(color = guide_legend(nrow = 2), linetype = guide_legend(nrow = 2))
 dev.off()
 
 ### fig:ci
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
-data <- list()
-for (i in seq_len(nrow(summary))) {
-    D <- summary$D[i]
-    tau <- summary$tau[i]
-    if (D >= exp(-r * tau)) {
-        data[[1]] <- simulate(
-            seed = NULL,
-            rep = 1e2,
-            time = 1e3,
-            dt = 1e-1,
-            tau = tau,
-            D = D,
-            N0 = 1e8,
-            m1 = 1e-8,
-            k = 1e8,
-            alpha = 1,
-            r = 4,
-            s = 0.1,
-            init_W = round(1e8 * D),
-            loci = 4
-        )
-        summary[i, c("rate", "ci_lower", "ci_upper")] <- metric3(data[[1]])
-    }
-    print(i / nrow(summary))
-}
-
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_ci.rdata")
-
-pdf("wahl/figs/ci.pdf", width = 10, height = 10)
-ggplot(summary, aes(x = D, y = rate)) +
-    geom_point(size = 3) +
-    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), size = 1) +
-    theme_light() +
-    scale_x_continuous(trans = scales::log10_trans(),
-        breaks = 10^seq(-7, 0),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    scale_y_continuous(trans = scales::log10_trans(),
-        breaks = 10^seq(-7, 0, 0.5),
-        labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    labs(
-        x = expression(italic("D")),
-        y = "Average mutation frequency after 1000 hours",
-    ) +
-    theme(
-        axis.title = element_text(size = 25),
-        axis.text = element_text(size = 25)
-        )
-dev.off()
-
-
-### unused
-
-# resource constrained
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
-summary$tau <- - log(summary$D)
-summary <- run_sims(summary, rep = 1e3, res = TRUE, r = 2)
+summary <- run_sims(summary, rep = 2e2, time = 1e3, r = 1.2,
+    loci = 4, num_mutants = NULL)
 
 # Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
+save(summary, file = "C:/Users/s4528540/Downloads/results/fig_ci.rdata")
 
-
-# load the saved file
-load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
-summary1 <- summary
-load("C:/Users/s4528540/Downloads/results/fig_optimality_constrained.rdata")
-summary2 <- summary
-# save as pdf
-pdf("wahl/figs/optimal.pdf", width = 10, height = 10)
-grid.arrange(optimal(summary1, 1, 0.1, "A"),
-    optimal(summary2, 1, 0.1, "B"), ncol = 2)
+# save the plot
+pdf("wahl/figs/ci.pdf", width = 10, height = 10)
+base_plot(summary) +
+    labs(y = "Average mutation frequency",) +
+    geom_point(aes(x = D, y = rate), size = 3) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8)
 dev.off()
