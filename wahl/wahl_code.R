@@ -7,21 +7,21 @@ library(future.apply)
 library(R.utils)
 
 # a growth rate function for nutrient-limited growth
-monod <- function(N, r, k) {
-  return(r * ifelse(k == 0, 1, 1 / (1 + k / N)))
+monod <- function(R, r, k) {
+  return(r * ifelse(k == 0, 1, 1 / (1 + k / R)))
 }
 
 # fitness advantages of new mutants
-mutant_fitness <- function(num_mutants, r, s, names) {
-  return(setNames(r * (1 + c(0, rexp(num_mutants, 1 / s))), names))
+mutant_fitness <- function(num_mutants, r, w, names) {
+  return(setNames(r * (1 + c(0, rexp(num_mutants, 1 / w))), names))
 }
 
 # a function that reduces all populations by a factor of D, in expectation
 bottleneck <- function(state, config) {
   with(config, {
     pops <- setNames(rbinom(length(names), state[names], D), names)
-    N <- state["N"] * D + N0 * (1 - D)
-    return(c(pops, N))
+    R <- state["R"] * D + R0 * (1 - D)
+    return(c(pops, R))
   })
 }
 
@@ -34,7 +34,7 @@ make_transitions <- function(names) {
       rate_list[[paste0(i, "_growth")]] <- setNames(c(+1), i)
     }
     # Add the nutrient depletion rate
-    rate_list[["N_depletion"]] <- setNames(c(-1), "N")
+    rate_list[["N_depletion"]] <- setNames(c(-1), "R")
   return(rate_list)
 }
 
@@ -42,15 +42,15 @@ make_transitions <- function(names) {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate replication rates
-    replication_rates <- state[names] * monod(N, r_vec, k)
+    replication_rates <- state[names] * monod(R, r_vec, k)
     if (is.numeric(num_mutants)) {
         # find which mutant category we should be filling
         to_mutate <- min(which(state == 0), num_mutants + 2) - 1
         # chance of a replication in row i resulting in a strain j cell
         mutation <- diag(num_mutants + 1)
         if (to_mutate <= num_mutants) {
-          mutation[1, to_mutate + 1] <- m1
-          mutation[1, 1] <- 1 - m1
+          mutation[1, to_mutate + 1] <- mu
+          mutation[1, 1] <- 1 - mu
         } else {
           print("Out of mutant spots! :(")
         }
@@ -61,7 +61,7 @@ rates <- function(state, config, t) {
     N_depletion <- sum(replication_rates * alpha)
     # Combine all rates and return
     rate_list <- c(growth_rates, N_depletion)
-    return(setNames(rate_list, c(names, "N")))
+    return(setNames(rate_list, c(names, "R")))
   })
 }
 
@@ -73,9 +73,9 @@ single_run <- function(config, x) {
     # Initialise the state variables
     state <- init
     if (is.numeric(num_mutants)) {
-      config$r_vec <- mutant_fitness(num_mutants, r, s, names)
+      config$r_vec <- mutant_fitness(num_mutants, r, w, names)
     } else {
-      config$r_vec <- r * t(1 + as.matrix(genotypes) %*% rexp(loci, 1 / s))
+      config$r_vec <- r * t(1 + as.matrix(genotypes) %*% rexp(loci, 1 / w))
     }
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     bottlenecks <- unique(round(c(seq(0, time, tau), time), 10))
@@ -85,7 +85,7 @@ single_run <- function(config, x) {
       # Create a new vector of growth rates for mutants, if locus-agnostic
       if (is.numeric(num_mutants)) {
         config$r_vec <- ifelse(state[0:num_mutants + 1] == 0,
-          mutant_fitness(num_mutants, r, s, names), config$r_vec)
+          mutant_fitness(num_mutants, r, w, names), config$r_vec)
       }
       # set the seed for reproducibility
       if (is.numeric(seed)) set.seed(round(seed + (x * time + t) / tau))
@@ -128,15 +128,14 @@ simulate <- function(
   max_step = Inf, # SSA max step parameter
   tau = 3, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
-  N0 = 1e9, # initial nutrient concentration
-  m1 = 1e-9, # rate of mutations conferring resistance to drug 1
-  init_W = 1e8, # initial wild type population size
-  init_M = 0, # initial mutant population sizes
+  R0 = 1e9, # initial nutrient concentration
+  mu = 1e-9, # rate of mutations conferring resistance to drug 1
+  N = 1e9, # (1/D) of the initial wild type population
   num_mutants = NULL, # number of mutants
   loci = NULL, # number of mutable loci in the genome
   r = 1, # wild type growth rate with infinite resources
-  s = 0.1, # mean fitness effect size of beneficial mutation
-  k = 1e8, # [N] at half-max growth rate
+  w = 0.1, # mean fitness effect size of beneficial mutation
+  k = 1e8, # [R] at half-max growth rate
   alpha = 1 # nutrients used per replication
   ) {
   # Define the parameters of the model
@@ -149,18 +148,18 @@ simulate <- function(
       genotypes <- expand.grid(replicate(loci, c(0, 1), simplify = FALSE))
       genotypes <- setNames(rev(genotypes), paste0("M", 1:loci))
       # Initialize the mutation matrix
-      mutation <- diag(1 - m1, 2 ^ loci)
+      mutation <- diag(1 - mu, 2 ^ loci)
       # Loop over all genotypes
       for (i in 1:2^loci) {
         for (j in 1:2^loci) {
           # If the Hamming distance is 1, set the mutation rate to be nonzero
           if (sum(genotypes[i, ] != genotypes[j, ]) == 1) {
-            mutation[i, j] <- m1 / loci
+            mutation[i, j] <- mu / loci
           }
         }
       }
   }
-  init <- setNames(c(init_W, rep(init_M, length(names) - 1), N0), c(names, "N"))
+  init <- setNames(c(round(N*D), rep(0, length(names) - 1), R0), c(names, "R"))
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
@@ -208,7 +207,7 @@ log_plot <- function(solutions, type = "all") {
     stop("type must be 'all', 'median' or 'mean'")
   }
   filtered <- summary %>%
-    filter(!(variable %in% c("N"))) %>%
+    filter(!(variable %in% c("R"))) %>%
     mutate(variable = factor(variable, levels = unique(variable))) %>%
     arrange(variable)
   # Initialise the colours
