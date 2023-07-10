@@ -34,45 +34,42 @@ target_hit <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
   !is.na(target_time(sol, target, strains))
 }
 
-sols <- data[[12]][[1]]
-log_plot(sols[sols$rep <= 10, ])
-
 # Create a grid of parameter combinations
 # summary <- expand.grid(dose_rep = seq(1, 12, 1), kappa = seq(0.5, 3, 0.5))
-T <- 0.6
-summary <- expand.grid(bcidal = seq(0, T, 0.05))
-summary$bstatic <- T - summary$bcidal
+T <- 1
+summary <- expand.grid(bcidal1 = seq(0, T, 0.1), bcidal2 = seq(0, T, 0.1))
+summary$bstatic1 <- T - summary$bcidal1
+summary$bstatic2 <- T - summary$bcidal2
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[i]] <- simulate(
-    init = c(S = 15e7, R1 = 0, R2 = 0, R12 = 0),
-    N0 = 1e5,
+    init = c(S = 1e9, R1 = 0, R2 = 0, R12 = 0),
+    N0 = 1e10,
     k = 1e0,
     alpha = 0,
-    supply = 1e8,
+    supply = 1e9,
     mu = 1,
-    bcidal1 = summary$bcidal[i],
-    bcidal2 = summary$bcidal[i],
-    bstatic1 = summary$bstatic[i],
-    bstatic2 = summary$bstatic[i],
-    delta = 0.5,
-    time = 1e2,
+    bcidal1 = summary$bcidal1[i],
+    bcidal2 = summary$bcidal2[i],
+    bstatic1 = summary$bstatic1[i],
+    bstatic2 = summary$bstatic2[i],
+    delta = 0.2,
+    time = 60,
     tau = 1e4,
     max_step = 1e-1,
-    rep = 1e0,
+    rep = 1e2,
     HGT = 0,
     dose_rep = 1,
     dose_gap = 10,
-    influx = 1e1 * c(A1 = 1, A2 = 1),
-    cycl = TRUE,
+    influx = 5 * c(A1 = 1, A2 = 1),
+    cycl = FALSE,
     m1 = 1e-9, m2 = 1e-9,
-    d1 = 0.2, d2 = 0.2,
+    d1 = 0.3, d2 = 0.3,
     deterministic = FALSE
 )
 print(i / nrow(summary))
 }
-summary
-log_plot(data[[1]][[1]][data[[1]][[1]]$rep <= 10, ], use = "N")
+log_plot(data[[1]][[1]][data[[1]][[1]]$rep <= 10, ])
 sol <- data[[1]][[1]][data[[1]][[1]]$rep == 43, ]
 sol2 <- sol[sol$variable =="S" & sol$time <= 15,]
 plot(sol2$time, sol2$value, type = "l")
@@ -96,7 +93,8 @@ for (i in seq_len(nrow(summary))) {
 }
 
 for (i in seq_len(nrow(summary))) {
-    wins <- target_hit(data[[i]][[1]], target = 1e2, strains = c("R1", "R2"))
+    wins <- c(target_hit(data[[i]][[1]], target = 1e2, strains = "R1"),
+              target_hit(data[[i]][[1]], target = 1e2, strains = "R2"))
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
@@ -163,16 +161,12 @@ ggplot(summary, aes(x = D, y = HGT, color = wins)) +
         legend.key.size = unit(2, "cm")
     )
 
-ggplot(summary, aes(x = dose_rep, y = kappa)) +
-    geom_tile(aes(fill = log10(wins))) +
+ggplot(summary, aes(x = bcidal1 / T, y = bcidal2 / T)) +
+    geom_tile(aes(fill = (1 - wins)^2)) +
     scale_fill_gradient(low = "white", high = "blue") +
-    labs(x = "doses per day", y = "kappa", fill = "log10(P(MDR))",
-            title = "Hill shape parameter interacts with dosing frequency",
-            subtitle = "proportion of runs where MDR becomes established") +
+    labs(x = "bcidal1", y = "bcidal2", fill = "P(extinct))") +
     theme_minimal() +
     theme(
-        plot.title = element_text(size = 29, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 25, hjust = 0.5),
         axis.title = element_text(size = 25, face = "bold"),
         axis.text = element_text(size = 25),
         legend.title = element_text(size = 20),
