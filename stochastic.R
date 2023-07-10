@@ -12,25 +12,6 @@ is.multiple <- function(denominator, numerator) {
   return(near(ratio, near_int))
 }
 
-# a pharmacodynamic function for singele-antibiotic induced killing of bacteria
-hill <- function(A, phi, zeta, kappa) {
-  return(phi / (1 + (A / zeta)^(-kappa)))
-}
-
-# interaction between the two drugs
-interaction <- function(A1_death, A2_death, phi1, phi2, theta) {
-  x <- theta * A1_death * A2_death / sqrt(phi1 * phi2)
-  return(ifelse(is.na(x), 0, x))
-}
-
-# total death rate from two antibiotics with interactions
-death <- function(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta) {
-  death1 <- hill(A1, phi1, zeta1, kappa1)
-  death2 <- hill(A2, phi2, zeta2, kappa2)
-  interaction <- interaction(death1, death2, phi1, phi2, theta)
-  return(death1 + death2 + interaction)
-}
-
 # a growth rate function for nutrient-limited growth
 monod <- function(N, mu, k) {
   if (N == 0) {return(0)}
@@ -84,10 +65,13 @@ make_transitions <- function() {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate death rates per cell
-    deaths <- death(A1, phi1, zeta1, kappa1, A2, phi2, zeta2, kappa2, theta)
+    A1e <- 1 / (1 + (A1 / zeta1 * 2 ^ (i21 * (1 - 2 ^ -A2))) ^ -kappa1)
+    A2e <- 1 / (1 + (A2 / zeta2 * 2 ^ (i12 * (1 - 2 ^ -A1))) ^ -kappa2)
+    deaths <- bcidal1 * A1e + bcidal2 * A2e
+    statics <- 1 - pmax(1, bstatic1 * A1e + bstatic2 * A2e)
     # Calculate replication rates
-    replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) *
-      (1 - (1 - bactericidal) * deaths / (phi1 + phi2))
+    replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) * statics
+    if (near(min(statics), 0)) {print("statics out of bounds")}
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
       S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
@@ -98,7 +82,7 @@ rates <- function(state, config, t) {
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate death rates
-    death_rates <- c(S, R1, R2, R12) * deaths * bactericidal
+    death_rates <- c(S, R1, R2, R12) * (deaths + delta)
     # Calculate other rates
     HGT_MDR_loss <- HGT * R12 * S
     HGT_MDR_gain <- HGT * R1 * R2
@@ -146,7 +130,8 @@ single_run <- function(config, x) {
         times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
         new <- ode(state, times, ode_rates, config)
       } else {
-        if (is.numeric(seed)) set.seed(seed + t) # set the seed for reproducibility
+        # set the seed for reproducibility
+        if (is.numeric(seed)) set.seed(round(seed + (x * time + t) / tau))
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
           tl.params = list(maxtau = max_step),
@@ -186,7 +171,6 @@ simulate <- function(
   deterministic = FALSE, # should be either TRUE or FALSE
   cycl = TRUE, # should be either TRUE or FALSE
   keep_old_drugs = TRUE, # should be either TRUE or FALSE
-  bactericidal = TRUE, # whether drugs directly kill or limit growth
   time = 100, # time to simulate, in hours
   dt = 0.1, # time step, in hours
   max_step = Inf, # SSA max step parameter, only used if deterministic = FALSE
@@ -200,16 +184,20 @@ simulate <- function(
   m2 = 1e-9, # rate of mutations conferring resistance to drug 2
   d1 = log(2) / 3.5, # rate of drug 1 elimination
   d2 = log(2) / 3.5, # rate of drug 2 elimination
+  i12 = 0, # interaction effect of drug 1 on drug 2
+  i21 = 0, # interaction effect of drug 2 on drug 1
+  bcidal1 = 0.6, # maximum drug 1 death rate
+  bcidal2 = 0.6, # maximum drug 2 death rate
+  bstatic1 = 0, # maximum reduction in growth rate due to drug 1
+  bstatic2 = 0, # maximum reduction in growth rate due to drug 2
   influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations, units of zeta_s
   init = c(S = 1e12, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
-  phi1 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 1 death rate
-  phi2 = 0.6 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # maximum drug 2 death rate
-  zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # [drug 1] at half-max death rate
-  zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # [drug 2] at half-max death rate
+  zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # [drug 1] at half-max effect
+  zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # [drug 2] at half-max effect
   kappa1 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter
   kappa2 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter
-  theta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # drug interaction term
   mu = 0.88 * c(S = 1, R1 = 0.9, R2 = 0.9, R12 = 0.81), # maximum growth rate
+  delta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # intrinsic death rate
   k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # [N] at half-max growth rate
   alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # nutrients used per replication
   supply = 0 # nutrient supply rate
@@ -278,7 +266,7 @@ log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
     mutate(xmin = lag(time), xmax = time) %>%
     filter(!is.na(xmin)) %>%
     select(xmin, xmax, A1, A2)
-  peak <- max(solutions$value, na.rm = TRUE)
+  peak <- max(solutions[solutions$variable %in% use, "value"], na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
     # Add the gradient backgrounds
@@ -332,3 +320,5 @@ log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
 
 system.time(log_plot(simulate()[[1]]))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
+# [1] 3.051810e+14 2.515378e+11 1.181122e+12 1.717214e+09 6.784406e+12
+# [6] 1.333550e-02 9.662624e-01
