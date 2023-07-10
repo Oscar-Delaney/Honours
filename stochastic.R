@@ -68,10 +68,10 @@ rates <- function(state, config, t) {
     A1e <- 1 / (1 + (A1 / zeta1 * 2 ^ (i21 * (1 - 2 ^ -A2))) ^ -kappa1)
     A2e <- 1 / (1 + (A2 / zeta2 * 2 ^ (i12 * (1 - 2 ^ -A1))) ^ -kappa2)
     deaths <- bcidal1 * A1e + bcidal2 * A2e
-    statics <- 1 - pmax(1, bstatic1 * A1e + bstatic2 * A2e)
+    statics <- 1 - pmin(1, bstatic1 * A1e + bstatic2 * A2e)
     # Calculate replication rates
     replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) * statics
-    if (near(min(statics), 0)) {print("statics out of bounds")}
+    # if (near(min(statics), 0)) {print("statics out of bounds")}
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
       S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
