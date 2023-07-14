@@ -43,17 +43,17 @@ summary$bstatic2 <- T - summary$bcidal2
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[1]] <- simulate(
-        init = c(S = 1e9, R1 = 0, R2 = 0, R12 = 0),
-        N0 = 1e10,
+        init = c(S = 3e8, R1 = 0, R2 = 0, R12 = 0),
+        N0 = 1e9,
         k = 1e0,
         alpha = 0,
-        supply = 1e9,
+        supply = 3e8,
         mu = 1,
         bcidal1 = summary$bcidal1[i],
         bcidal2 = summary$bcidal2[i],
         bstatic1 = summary$bstatic1[i],
         bstatic2 = summary$bstatic2[i],
-        delta = 0.2,
+        delta = 0.6,
         time = 60,
         tau = 1e4,
         max_step = 1e-1,
@@ -61,24 +61,23 @@ for (i in seq_len(nrow(summary))) {
         HGT = 0,
         dose_rep = 1,
         dose_gap = 10,
-        influx = 5 * c(A1 = 1, A2 = 1),
-        cycl = FALSE,
+        influx = 10 * c(A1 = 1, A2 = 1),
+        cycl = TRUE,
         m1 = 1e-9, m2 = 1e-9,
-        d1 = 0.3, d2 = 0.3,
+        d1 = 0.5, d2 = 0.5,
         deterministic = FALSE
     )
-    wins <- c(target_hit(data[[1]][[1]], target = 1e2, strains = "R1"),
-              target_hit(data[[1]][[1]], target = 1e2, strains = "R2"))
+    wins <- c(target_hit(data[[1]][[1]], target = 1e2, strains = c("R1", "R2")))
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
     print(i / nrow(summary))
 }
-log_plot(data[[4]][[1]][data[[1]][[1]]$rep <= 10, ], use = c("S", "R1", "R2", "N"))
+log_plot(data[[9]][[1]][data[[1]][[1]]$rep <= 10, ], use = c("S", "R1", "R2", "N"))
 
 ggplot(summary, aes(x = bcidal1 / T, y = bcidal2 / T)) +
-    geom_tile(aes(fill = (1 - wins)^2)) +
+    geom_tile(aes(fill = 1 - wins)) +
     scale_fill_gradient(low = "white", high = "blue") +
     labs(x = "bcidal1", y = "bcidal2", fill = "P(extinct)") +
     theme_minimal() +
@@ -91,6 +90,7 @@ ggplot(summary, aes(x = bcidal1 / T, y = bcidal2 / T)) +
         legend.key.width = unit(2, "cm")
     )
 
+summary
 sol <- data[[1]][[1]][data[[1]][[1]]$rep == 43, ]
 sol2 <- sol[sol$variable =="S" & sol$time <= 15,]
 plot(sol2$time, sol2$value, type = "l")
@@ -122,12 +122,13 @@ for (i in seq_len(nrow(summary))) {
     summary$ymax[i] <- ci[2]
 }
 # plot with one independent variable and one dependent variable
-ggplot(summary, aes(x = bcidal / T, y = wins)) +
+ggplot(summary, aes(x = bcidal1 / T, y = wins)) +
     geom_point(size = 3) +
     geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
     theme_light() +
     # scale_x_log10() +
     scale_y_continuous(limits = c(0, 1)) +
+    # scale_y_log10(limits = c(1, 1e11)) +
     labs(
         x = "Mode (0 = bacteriostatic, 1 = bactericidal)",
         y = "Probability that resistance emerges in 100 hours"
@@ -183,6 +184,6 @@ ggplot(summary, aes(x = D, y = HGT, color = wins)) +
     )
 
 # # Save the simulation results to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/10_07_cidal.RData")
+save(summary, file = "C:/Users/s4528540/Downloads/results/12_07_unconstrained.RData")
 # read the data file we just wrote back as data
-load("C:/Users/s4528540/Downloads/results/data4.RData")
+load("C:/Users/s4528540/Downloads/results/12_07_unconstrained.RData")
