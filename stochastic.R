@@ -69,6 +69,7 @@ rates <- function(state, config, t) {
     A2e <- 1 / (1 + (A2 / zeta2 * 2 ^ (i12 * (1 - 2 ^ -A1))) ^ -kappa2)
     deaths <- bcidal1 * A1e + bcidal2 * A2e
     statics <- 1 - pmin(1, bstatic1 * A1e + bstatic2 * A2e)
+    statics <- (1 - bstatic1 * A1e) * (1 - bstatic2 * A2e)
     # Calculate replication rates
     replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) * statics
     # if (near(min(statics), 0)) {print("statics out of bounds")}
