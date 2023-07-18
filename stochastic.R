@@ -31,7 +31,7 @@ event <- function(state, config) {
       } else {
         pops <- setNames(rbinom(length(pops), pops, D), names(pops))
         }
-      N <- N * D + N0 * (1 - D)
+      N <- N * D + N0 * (1 - D) + N_add
       drugs <- drugs * D
     }
     if (is.multiple(dose_gap, t)) {
@@ -201,7 +201,8 @@ simulate <- function(
   delta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # intrinsic death rate
   k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # [N] at half-max growth rate
   alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # nutrients used per replication
-  supply = 0 # nutrient supply rate
+  supply = 0, # nutrient supply rate
+  N_add = 0 # additional nutrient added at each bottleneck, above base media
   ) {
   # Define the parameters of the model
   config <- as.list(environment())
