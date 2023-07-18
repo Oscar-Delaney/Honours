@@ -37,13 +37,13 @@ target_hit <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
 # Create a grid of parameter combinations
 # summary <- expand.grid(dose_rep = seq(1, 12, 1), kappa = seq(0.5, 3, 0.5))
 T <- 1
-summary <- expand.grid(bcidal1 = seq(0, T, 0.05), bcidal2 = seq(0, T, 0.05))
+summary <- expand.grid(bcidal1 = seq(0, T, 0.1), bcidal2 = seq(0, T, 0.1))
 summary$bstatic1 <- T - summary$bcidal1
 summary$bstatic2 <- T - summary$bcidal2
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[1]] <- simulate(
-        init = c(S = 3e8, R1 = 0, R2 = 0, R12 = 0),
+        init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0),
         N0 = 1e9,
         k = 1e0,
         alpha = 0,
@@ -53,7 +53,10 @@ for (i in seq_len(nrow(summary))) {
         bcidal2 = summary$bcidal2[i],
         bstatic1 = summary$bstatic1[i],
         bstatic2 = summary$bstatic2[i],
-        delta = 0.6,
+        zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28),
+        zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28),
+        i12 = 2, i21 = 2,
+        delta = 0.1,
         time = 60,
         tau = 1e4,
         max_step = 1e-1,
@@ -61,20 +64,20 @@ for (i in seq_len(nrow(summary))) {
         HGT = 0,
         dose_rep = 1,
         dose_gap = 10,
-        influx = 10 * c(A1 = 1, A2 = 1),
+        influx = 3 * c(A1 = 1, A2 = 1),
         cycl = TRUE,
         m1 = 1e-9, m2 = 1e-9,
-        d1 = 0.5, d2 = 0.5,
+        d1 = 0.1, d2 = 0.1,
         deterministic = FALSE
     )
-    wins <- c(target_hit(data[[1]][[1]], target = 1e2, strains = c("R1", "R2")))
+    wins <- target_hit(data[[1]][[1]], target = 1e2, strains = c("R1", "R2"))
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
     print(i / nrow(summary))
 }
-log_plot(data[[9]][[1]][data[[1]][[1]]$rep <= 10, ], use = c("S", "R1", "R2", "N"))
+# log_plot(data[[1]][[1]][data[[1]][[1]]$rep <= 10, ], use = c("S", "R1", "R2", "N"))
 
 ggplot(summary, aes(x = bcidal1 / T, y = bcidal2 / T)) +
     geom_tile(aes(fill = 1 - wins)) +
@@ -114,8 +117,7 @@ for (i in seq_len(nrow(summary))) {
 }
 
 for (i in seq_len(nrow(summary))) {
-    wins <- c(target_hit(data[[i]][[1]], target = 1e2, strains = "R1"),
-              target_hit(data[[i]][[1]], target = 1e2, strains = "R2"))
+    wins <- target_hit(data[[i]][[1]], target = 1e2, strains = "R1")
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
@@ -184,6 +186,6 @@ ggplot(summary, aes(x = D, y = HGT, color = wins)) +
     )
 
 # # Save the simulation results to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/12_07_unconstrained.RData")
+save(summary, file = "C:/Users/s4528540/Downloads/results/17_07_synergy_2on1.RData")
 # read the data file we just wrote back as data
-load("C:/Users/s4528540/Downloads/results/12_07_unconstrained.RData")
+load("C:/Users/s4528540/Downloads/results/17_07_synergy_reciprocal.RData")
