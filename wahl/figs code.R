@@ -9,6 +9,8 @@ r <- 1 # resource unconstrained growth rate
 r_adj <- 1.023 # adjustment for non-infinitesmal step size
 r_res <- 1.5 # resource constrained growth rate
 w <- 0.1
+fig_dir <- "C:/Users/s4528540/Documents/Oscar Honours/Honours/wahl/figs"
+data_dir <- "C:/Users/s4528540/Downloads/results"
 
 custom_theme <- theme(
     axis.title = element_text(size = 25),
@@ -107,11 +109,11 @@ for (i in 1:5) {
 }
 
 # save the plots
-pdf("wahl/figs/dynamics.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/dynamics.pdf"), width = 10, height = 10)
 dynamics(data[[5]], "")
 dev.off()
 
-pdf("wahl/figs/dynamics-constrained.pdf", width = 20, height = 20)
+pdf(paste0(fig_dir, "/dynamics-constrained.pdf"), width = 20, height = 20)
 grid.arrange(
     dynamics(data[[1]], "A"),
     dynamics(data[[2]], "B"),
@@ -127,8 +129,8 @@ summary$tau <- - log(summary$D)
 summary <- run_sims(summary, rep = 1e3, r = r * r_adj, w = w, res = FALSE)
 
 # Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
-load("C:/Users/s4528540/Downloads/results/fig_optimality_unconstrained.rdata")
+save(summary, file = paste0(data_dir,"/fig_optimality_unconstrained.rdata"))
+
 # Define linetypes and palettes for theory lines
 labels <- c("exact", "approximation")
 linetype_palette <- setNames(c("solid", "dashed"), labels)
@@ -144,7 +146,7 @@ cols = -D, names_to = "variable", values_to = "value")
 theory_data$variable <- factor(theory_data$variable, levels = labels)
 
 # save the plot
-pdf("wahl/figs/optimal.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.6) +
     geom_line(data = theory_data, aes(x = D, y = value, color = variable, linetype = variable), linewidth = 1.5) +
@@ -160,10 +162,10 @@ summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0,
 summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE)
 
 # Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_constrained.rdata")
+save(summary, file = paste0("/fig_constrained.rdata"))
 
 # save the plot
-pdf("wahl/figs/constrained.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 10)
 constrained(summary)
 dev.off()
 
@@ -173,10 +175,10 @@ summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
 summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
 
 # Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_tau24.rdata")
+save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
 
 # save the plot
-pdf("wahl/figs/tau24.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/tau24.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
     geom_point(aes(x = D, y = rate), size = 3)
@@ -196,10 +198,10 @@ theory_data <- data.frame(
 )
 
 # Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
-load("C:/Users/s4528540/Downloads/results/fig_k_variation_optimal.rdata")
+save(summary, file = paste0(data_dir,"/fig_k_variation_optimal.rdata"))
+
 # save the plot
-pdf("wahl/figs/k_variation_optimal.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/k_variation_optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio),
         linewidth = 0.8) +
@@ -227,7 +229,7 @@ t_data <- final_counts %>%
     inner_join(mutation_times, by = c("rep", "variable"))
 
 # save the data
-save(t_data, file = "C:/Users/s4528540/Downloads/results/fig_t_distribution.rdata")
+save(t_data, file = paste0(data_dir, "/fig_t_distribution.rdata"))
 
 t_theory <- data.frame(
   t = seq(0, data[[2]]$tau, by = 0.001)
@@ -236,7 +238,7 @@ t_theory$rate <- rate_at_t(D, r = r, w = w, t = t_theory$t)
 t_theory$rate <- t_theory$rate / sum(t_theory$rate * 0.001)
 
 # save the plot
-pdf("wahl/figs/t_distribution.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/t_distribution.pdf"), width = 10, height = 10)
 ggplot(t_data, aes(x = last_zero)) +
   geom_density(aes(y = ..density.., weight = p_fix),
     adjust = 1 / 2, fill = "grey", alpha = 1, bw = 0.01) +
@@ -255,7 +257,7 @@ s_data <- final_counts %>%
     inner_join(data[[2]]$s_all, by = c("rep", "variable"))
 
 # save the data
-save(s_data, file = "C:/Users/s4528540/Downloads/results/fig_s_distribution.rdata")
+save(s_data, file = paste0(data_dir, "/fig_s_distribution.rdata"))
 
 s_theory <- data.frame(
   s = seq(0, 1, by = 0.001)
@@ -264,7 +266,7 @@ s_theory$fix <- s_theory$s * exp(-s_theory$s / w) / w^2
 s_theory$arise <- exp(-s_theory$s / w) / w
 
 # save the plot
-pdf("wahl/figs/s_distribution.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/s_distribution.pdf"), width = 10, height = 10)
 ggplot(s_data, aes(x = value)) +
   # raise p_fix to a high power to ensure mutations actually very likely to fix
   # are the ones that dominate the distribution
@@ -313,7 +315,7 @@ pmfs <- tibble(
   mutate(pmf = n / sum(n))
 
 # save the plot
-pdf("wahl/figs/binomial.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/binomial.pdf"), width = 10, height = 10)
 ggplot(pmfs, aes(x = value, y = pmf, colour = source, shape = source)) +
   geom_jitter(size = 5, width = 0.2, height = 0) +
   scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
@@ -353,7 +355,7 @@ summary <- summary %>%
 summary$model <- factor(summary$model, levels = c("det_poi", "sto_poi", "det_bin", "sto_bin"))
 summary$div_tau <- factor(summary$div_tau, levels = c(TRUE, FALSE))
 # save the plot
-pdf("wahl/figs/methodology.pdf", width = 10, height = 10)
+pdf(paste0(fig_data, "/methodology.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_line(aes(x = D, y = rate, color = model, linetype = div_tau), linewidth = 1) +
     scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
@@ -370,10 +372,10 @@ summary <- run_sims(summary, rep = 2e2, time = 1e3, r = r_res * r_adj,
     loci = 4, num_mutants = NULL, res = TRUE)
 
 # Save the summary to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/fig_ci.rdata")
+save(summary, file = paste0(data_dir, "/fig_ci.rdata"))
 
 # save the plot
-pdf("wahl/figs/ci.pdf", width = 10, height = 10)
+pdf(paste0(fig_dir, "/ci.pdf"), width = 10, height = 10)
 base_plot(summary) +
     labs(y = "Average mutation frequency") +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +

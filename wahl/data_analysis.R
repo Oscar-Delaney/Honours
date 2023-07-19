@@ -17,7 +17,7 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
             max_step = Inf,
             D = D,
             R0 = 1e9,
-            k = R0 * k_ratio,
+            k = 1e9 * k_ratio,
             alpha = 1 * res,
             r = r * (1 + k_ratio), # Adaptivetau step size
             # causes observed growth rate to be lower than expected
