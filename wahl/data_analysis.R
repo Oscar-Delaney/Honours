@@ -1,16 +1,13 @@
 # Generate and analyse data
-run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1,
+run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
     res = TRUE, num_mutants = 1e2, loci = NULL) {
-    summary$mu <- 1e-9 * ifelse(is.null(loci), summary$D ^ - 0.5, 1)
     func <- ifelse(is.null(loci), metric, metric_ci)
     data <- list()
     for (i in seq_len(nrow(summary))) {
         D <- summary$D[i]
-        mu <- summary$mu[i]
         tau <- summary$tau[i]
         k_ratio <- res *
             ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
-        R0 <- 1e9
         data <- simulate(
             seed = i,
             rep = rep,
@@ -19,16 +16,16 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1,
             tau = tau,
             max_step = Inf,
             D = D,
-            R0 = R0,
+            R0 = 1e9,
             k = R0 * k_ratio,
             alpha = 1 * res,
-            r = 1.023 * r * (1 + k_ratio), # Adaptivetau step size causes
-            # observed growth rate to be lower than expected
+            r = r * (1 + k_ratio), # Adaptivetau step size
+            # causes observed growth rate to be lower than expected
             w = w,
             mu = mu,
-            N = R0,
+            N = 1e9,
             num_mutants = num_mutants,
-            loci = loci,
+            loci = loci
         )
         summary[i, c("rate", "ci_lower", "ci_upper")] <- func(data)
         print(i / nrow(summary))
@@ -98,8 +95,7 @@ metric <- function(data) {
         group_by(rep) %>%
         summarise(n = sum(final_value > 1e1), n_hat = sum(p_fix))
     # estimate the fixation rate and store this
-    fixation_rate <- fixed$n_hat / endpoint /
-        ((data[[2]]$N) * data[[2]]$mu)
+    fixation_rate <- fixed$n_hat / endpoint
     se <- sd(fixation_rate) / sqrt(length(fixation_rate))
     ci <- mean(fixation_rate) + se * qnorm(c(0.5, 0.025, 0.975))
     return(ci)
