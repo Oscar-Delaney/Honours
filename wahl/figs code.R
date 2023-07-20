@@ -31,7 +31,7 @@ base_plot <- function(summary) {
             labels = trans_format("log10", math_format(10^.x))) +
         labs(
             x = expression(italic("D")),
-            y = expression(paste("fixation rate (loci hour"^"-1)"))
+            y = expression(paste("fixation rate (loci hour"^"-1",")"))
         ) +
         theme_light() +
         custom_theme
@@ -129,7 +129,7 @@ summary$tau <- - log(summary$D)
 summary <- run_sims(summary, rep = 1e3, r = r * r_adj, w = w, res = FALSE)
 
 # Save the summary to a file
-save(summary, file = paste0(data_dir,"/fig_optimality_unconstrained.rdata"))
+save(summary, file = paste0(data_dir, "/fig_optimality_unconstrained.rdata"))
 
 # Define linetypes and palettes for theory lines
 labels <- c("exact", "approximation")
@@ -159,10 +159,10 @@ dev.off()
 ### fig constrained
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
-summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE)
+summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
 
 # Save the summary to a file
-save(summary, file = paste0("/fig_constrained.rdata"))
+save(summary, file = paste0(data_dir, "/fig_constrained.rdata"))
 
 # save the plot
 pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 10)
@@ -172,7 +172,7 @@ dev.off()
 ### fig:tau24
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
-summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
+summary <- run_sims(summary, rep = 2e3, r = r_res * r_adj, res = TRUE)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
@@ -198,8 +198,8 @@ theory_data <- data.frame(
 )
 
 # Save the summary to a file
-save(summary, file = paste0(data_dir,"/fig_k_variation_optimal.rdata"))
-
+save(summary, file = paste0(data_dir, "/fig_k_variation_optimal.rdata"))
+load(paste0(data_dir, "/fig_k_variation_optimal.rdata"))
 # save the plot
 pdf(paste0(fig_dir, "/k_variation_optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
@@ -216,9 +216,9 @@ dev.off()
 
 ### fig:t_distribution
 D <- 10^-0.1
-data <- simulate(seed = 1, time = 50, rep = 1e3, dt = 1e-2, max_step = 1e-2,
+data <- simulate(seed = 1, time = 50, rep = 5e2, dt = 1e-2, max_step = 1e-2,
     D = D,  w = w, tau = -log(D), R0 = 1e9, N = 1e9,
-    mu = 1e-8, k = 0, alpha = 0, r = r * r_adj, num_mutants = 1e2)
+    mu = 1e-8, k = 0, alpha = 0, r = r * r_adj, num_mutants = 2e2)
 final_counts <- fixed(data)[[1]]
 
 mutation_times <- data[[1]] %>%
@@ -313,6 +313,7 @@ pmfs <- tibble(
   group_by(source, value) %>%
   summarise(n = n(), .groups = "drop") %>%
   mutate(pmf = n / sum(n))
+pmfs$source <- factor(pmfs$source, levels = c("det_poi", "sto_poi", "det_bin", "sto_bin"))
 
 # save the plot
 pdf(paste0(fig_dir, "/binomial.pdf"), width = 10, height = 10)
@@ -355,7 +356,7 @@ summary <- summary %>%
 summary$model <- factor(summary$model, levels = c("det_poi", "sto_poi", "det_bin", "sto_bin"))
 summary$div_tau <- factor(summary$div_tau, levels = c(TRUE, FALSE))
 # save the plot
-pdf(paste0(fig_data, "/methodology.pdf"), width = 10, height = 10)
+pdf(paste0(fig_dir, "/methodology.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_line(aes(x = D, y = rate, color = model, linetype = div_tau), linewidth = 1) +
     scale_color_manual(values = setNames(scico(4, palette = "roma"), label)) +
