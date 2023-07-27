@@ -24,7 +24,7 @@ event <- function(state, config) {
     t <- state["time"] # extract the time
     pops <- state[names(init)] # extract just the cell counts
     N <- state["N"] # extract the nutrient concentration
-    drugs <- state[c("A1", "A2")] # extract the drug concentrations
+    drugs <- state[c("A", "B")] # extract the drug concentrations
     if (is.multiple(tau, t)) {
       if (deterministic) {
         pops <- pops * D
@@ -45,19 +45,19 @@ event <- function(state, config) {
 make_transitions <- function() {
   return(list(
   S_growth = c(S = +1),
-  R1_growth = c(R1 = +1),
-  R2_growth = c(R2 = +1),
-  R12_growth = c(R12 = +1),
+  R1_growth = c(RA = +1),
+  R2_growth = c(RB = +1),
+  R12_growth = c(RAB = +1),
   S_death = c(S = -1),
-  R1_death = c(R1 = -1),
-  R2_death = c(R2 = -1),
-  R12_death = c(R12 = -1),
-  HGT_MDR_loss = c(S = -1, R1 = +1, R2 = +1, R12 = -1),
-  HGT_MDR_gain = c(S = +1, R1 = -1, R2 = -1, R12 = +1),
+  R1_death = c(RA = -1),
+  R2_death = c(RB = -1),
+  R12_death = c(RAB = -1),
+  HGT_MDR_loss = c(S = -1, RA = +1, RB = +1, RAB = -1),
+  HGT_MDR_gain = c(S = +1, RA = -1, RB = -1, RAB = +1),
   N_depletion = c(N = -1),
   N_antidepletion = c(N = +1),
-  A1_depletion = c(A1 = -1),
-  A2_depletion = c(A2 = -1)
+  A1_depletion = c(A = -1),
+  A2_depletion = c(B = -1)
 ))
 }
 
@@ -65,32 +65,32 @@ make_transitions <- function() {
 rates <- function(state, config, t) {
   with(as.list(c(state, config)), {
     # Calculate death rates per cell
-    A1e <- 1 / (1 + (A1 / zeta1 * 2 ^ (i21 * (1 - 2 ^ -A2))) ^ -kappa1)
-    A2e <- 1 / (1 + (A2 / zeta2 * 2 ^ (i12 * (1 - 2 ^ -A1))) ^ -kappa2)
+    A1e <- 1 / (1 + (A / zeta1 * 2 ^ (i21 * (1 - 2 ^ -B))) ^ -kappa1)
+    A2e <- 1 / (1 + (B / zeta2 * 2 ^ (i12 * (1 - 2 ^ -A))) ^ -kappa2)
     deaths <- bcidal1 * A1e + bcidal2 * A2e
     statics <- 1 - pmin(1, bstatic1 * A1e + bstatic2 * A2e)
     statics <- (1 - bstatic1 * A1e) * (1 - bstatic2 * A2e)
     # Calculate replication rates
-    replication_rates <- c(S, R1, R2, R12) * monod(N, mu, k) * statics
+    replication_rates <- c(S, RA, RB, RAB) * monod(N, mu, k) * statics
     # if (near(min(statics), 0)) {print("statics out of bounds")}
     # chance of a replication in row i resulting in a strain j cell
     mutation <- matrix(c(
-      S  = c((1 - m1) * (1 - m2), m1 * (1 - m2), (1 - m1) * m2, m1 * m2),
-      R1 = c(0, 1 - m2, 0, m2),
-      R2 = c(0, 0, 1 - m1, m1),
-      R12 = c(0, 0, 0, 1)
+      S  = c((1 - m_A) * (1 - m_B), m_A * (1 - m_B), (1 - m_A) * m_B, m_A * m_B),
+      RA = c(0, 1 - m_B, 0, m_B),
+      RB = c(0, 0, 1 - m_A, m_A),
+      RAB = c(0, 0, 0, 1)
     ), nrow = 4, byrow = TRUE)
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
     # Calculate death rates
-    death_rates <- c(S, R1, R2, R12) * (deaths + delta)
+    death_rates <- c(S, RA, RB, RAB) * (deaths + delta)
     # Calculate other rates
-    HGT_MDR_loss <- HGT * R12 * S
-    HGT_MDR_gain <- HGT * R1 * R2
+    HGT_MDR_loss <- HGT * RAB * S
+    HGT_MDR_gain <- HGT * RA * RB
     N_depletion <- sum(replication_rates * alpha)
     N_antidepletion <- supply
-    A1_depletion <- d1 * A1
-    A2_depletion <- d2 * A2
+    A1_depletion <- d1 * A
+    A2_depletion <- d2 * B
     # Combine all rates and return
     rate_list <- c(growth_rates, death_rates, HGT_MDR_loss, HGT_MDR_gain,
       N_depletion, N_antidepletion, A1_depletion, A2_depletion)
@@ -103,12 +103,12 @@ ode_rates <- function(t, state, config) {
   with(as.list(rates(state, config, t)), {
     return(list(c(
       S = S_growth - S_death + HGT_MDR_gain - HGT_MDR_loss,
-      R1 = R1_growth - R1_death - HGT_MDR_gain + HGT_MDR_loss,
-      R2 = R2_growth - R2_death - HGT_MDR_gain + HGT_MDR_loss,
-      R12 = R12_growth - R12_death + HGT_MDR_gain - HGT_MDR_gain,
+      RA = R1_growth - R1_death - HGT_MDR_gain + HGT_MDR_loss,
+      RB = R2_growth - R2_death - HGT_MDR_gain + HGT_MDR_loss,
+      RAB = R12_growth - R12_death + HGT_MDR_gain - HGT_MDR_gain,
       N = -N_depletion,
-      A1 = -A1_depletion,
-      A2 = -A2_depletion
+      A = -A1_depletion,
+      B = -A2_depletion
     )))
   })
 }
@@ -181,8 +181,8 @@ simulate <- function(
   D = 0.1, # dilution ratio at bottlenecks
   N0 = 1e15, # initial nutrient concentration
   HGT = 0, # rate of horizontal gene transfer
-  m1 = 1e-9, # rate of mutations conferring resistance to drug 1
-  m2 = 1e-9, # rate of mutations conferring resistance to drug 2
+  m_A = 1e-9, # rate of mutations conferring resistance to drug 1
+  m_B = 1e-9, # rate of mutations conferring resistance to drug 2
   d1 = log(2) / 3.5, # rate of drug 1 elimination
   d2 = log(2) / 3.5, # rate of drug 2 elimination
   i12 = 0, # interaction effect of drug 1 on drug 2
@@ -191,16 +191,16 @@ simulate <- function(
   bcidal2 = 0.6, # maximum drug 2 death rate
   bstatic1 = 0, # maximum reduction in growth rate due to drug 1
   bstatic2 = 0, # maximum reduction in growth rate due to drug 2
-  influx = 7 * c(A1 = 1, A2 = 1), # drug influx concentrations, units of zeta_s
-  init = c(S = 1e12, R1 = 0, R2 = 0, R12 = 0), # initial population sizes
-  zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28), # [drug 1] at half-max effect
-  zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28), # [drug 2] at half-max effect
-  kappa1 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter
-  kappa2 = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # Hill function shape parameter
-  mu = 0.88 * c(S = 1, R1 = 0.9, R2 = 0.9, R12 = 0.81), # maximum growth rate
-  delta = 0 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # intrinsic death rate
-  k = 1e14 * c(S = 1, R1 = 1, R2 = 1, R12 = 1), # [N] at half-max growth rate
-  alpha = c(S = 1, R1 = 1, R2 = 1, R12 = 1), # nutrients used per replication
+  influx = 7 * c(A = 1, B = 1), # drug influx concentrations, units of zeta_s
+  init = c(S = 1e12, RA = 0, RB = 0, RAB = 0), # initial population sizes
+  zeta1 = c(S = 1, RA = 28, RB = 1, RAB = 28), # [drug 1] at half-max effect
+  zeta2 = c(S = 1, RA = 1, RB = 28, RAB = 28), # [drug 2] at half-max effect
+  kappa1 = c(S = 1, RA = 1, RB = 1, RAB = 1), # Hill function shape parameter
+  kappa2 = c(S = 1, RA = 1, RB = 1, RAB = 1), # Hill function shape parameter
+  mu = 0.88 * c(S = 1, RA = 0.9, RB = 0.9, RAB = 0.81), # maximum growth rate
+  delta = 0 * c(S = 1, RA = 1, RB = 1, RAB = 1), # intrinsic death rate
+  k = 1e14 * c(S = 1, RA = 1, RB = 1, RAB = 1), # [N] at half-max growth rate
+  alpha = c(S = 1, RA = 1, RB = 1, RAB = 1), # nutrients used per replication
   supply = 0, # nutrient supply rate
   N_add = 0 # additional nutrient added at each bottleneck, above base media
   ) {
@@ -219,7 +219,7 @@ simulate <- function(
   return(list(long, config))
 }
 
-log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
+log_plot <- function(solutions, type = "all", use = c("S", "RA", "RB", "RAB")) {
   # Choose the type of central tendency and range to plot
   if (type == "mean") {
     summary <- solutions %>%
@@ -259,7 +259,7 @@ log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
   colors <- c("black", "navy", "#800000", "#008000", "gold")
   # Create antibiotic concentrations data frame
   background_df <- solutions %>%
-    filter(rep == min(rep) & variable %in% c("A1", "A2")) %>%
+    filter(rep == min(rep) & variable %in% c("A", "B")) %>%
     group_by(variable) %>%
     mutate(value = value / max(value)) %>%
     mutate(across(value, ~replace_na(.x, 0))) %>%
@@ -267,22 +267,22 @@ log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
     pivot_wider(names_from = variable, values_from = value) %>%
     mutate(xmin = lag(time), xmax = time) %>%
     filter(!is.na(xmin)) %>%
-    select(xmin, xmax, A1, A2)
+    select(xmin, xmax, A, B)
   peak <- max(solutions[solutions$variable %in% use, "value"], na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
     # Add the gradient backgrounds
     geom_rect(data = background_df,
       aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.2,
-         ymax = peak * 10^0.4, fill = A1), color = NA, alpha = 1) +
+         ymax = peak * 10^0.4, fill = A), color = NA, alpha = 1) +
     scale_fill_gradient(low = "white", high = colors[2],
-      limits = c(0, 1), name = "A1", labels = NULL) +
+      limits = c(0, 1), name = "A", labels = NULL) +
     new_scale_fill() +
     geom_rect(data = background_df,
       aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.4,
-        ymax = peak * 10^0.6, fill = A2), color = NA, alpha = 1) +
+        ymax = peak * 10^0.6, fill = B), color = NA, alpha = 1) +
     scale_fill_gradient(low = "white", high = colors[3],
-      limits = c(0, 1), name = "A2", labels = NULL) +
+      limits = c(0, 1), name = "B", labels = NULL) +
     # Add the lines
     new_scale_fill() +
     geom_line(data = filtered, aes(x = time, y = central, color = variable,
@@ -294,17 +294,17 @@ log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
       breaks = 10^seq(0, 20),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(
-      title = "Bacterial growth over time",
+      # title = "Bacterial growth over time",
       x = "Time (hours)",
-      y = "Population Size",
+      y = "Population size",
       color = "Strain",
       fill = "Strain"
     ) +
     theme_light() +
     theme(
       legend.position = "bottom",
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
+      # plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 35),
       axis.text = element_text(size = 25),
       legend.title = element_text(size = 20),
       legend.text = element_text(size = 20)
@@ -317,7 +317,7 @@ log_plot <- function(solutions, type = "all", use = c("S", "R1", "R2", "R12")) {
       scale_fill_manual(values = colors)
   }
   # Display the plot
-  print(plot)
+  return(plot)
 }
 
 system.time(log_plot(simulate()[[1]]))
