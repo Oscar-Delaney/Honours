@@ -189,7 +189,8 @@ dev.off()
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1),
     k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
-summary$k_ratio <- as.factor(round(as.numeric(summary$k_ratio), 3))
+summary$k <- as.factor(round(10^(as.numeric(summary$k_ratio)+6), 3))
+summary$k <- as.factor(summary$k_ratio * 1e9)
 summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
 theory_data <- data.frame(
     D = unique(summary$D),
@@ -203,14 +204,16 @@ load(paste0(data_dir, "/fig_k_variation_optimal.rdata"))
 # save the plot
 pdf(paste0(fig_dir, "/k_variation_optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
-    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k_ratio),
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k),
         linewidth = 0.8) +
-    geom_line(aes(x = D, y = rate, color = k_ratio), size = 1) +
+    geom_line(aes(x = D, y = rate, color = k), size = 1) +
     geom_line(data = theory_data, aes(x = D, y = rate, linetype = theory), size = 1) +
-    geom_point(aes(x = D, y = rate, color = k_ratio), size = 3) +
+    geom_point(aes(x = D, y = rate, color = k), size = 3) +
     scale_color_scico_d(palette = "roma") +
     scale_linetype_manual(values = c("unconstrained" = "dashed")) +
-    labs(linetype = NULL)
+    labs(linetype = NULL) +
+    theme(legend.text = element_text(size = 17),
+    legend.title = element_text(size = 17))
 dev.off()
 
 
