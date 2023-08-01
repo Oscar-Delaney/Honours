@@ -1,6 +1,6 @@
 # Generate and analyse data
 run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
-    res = TRUE, num_mutants = 1e2, loci = NULL) {
+    res = TRUE, flow = 1, num_mutants = 1e2, loci = NULL) {
     func <- ifelse(is.null(loci), metric, metric_ci)
     data <- list()
     for (i in seq_len(nrow(summary))) {
@@ -13,9 +13,10 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
             rep = rep,
             time = time,
             dt = 1e-1,
-            tau = tau,
+            tau = ifelse(tau == 0, 1e4, tau),
             max_step = Inf,
             D = D,
+            flow = ifelse(D == 1, flow, 0),
             R0 = 1e9,
             k = 1e9 * k_ratio,
             alpha = 1 * res,
