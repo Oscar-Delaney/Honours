@@ -33,8 +33,14 @@ make_transitions <- function(names) {
     for (i in names) {
       rate_list[[paste0(i, "_growth")]] <- setNames(c(+1), i)
     }
+    # Add the nutrient inflow rate
+    rate_list[["R_inflow"]] <- setNames(c(+1), "R")
+    # Add the death rates for each mutant
+    for (i in names) {
+      rate_list[[paste0(i, "_death")]] <- setNames(c(-1), i)
+    }
     # Add the nutrient depletion rate
-    rate_list[["N_depletion"]] <- setNames(c(-1), "R")
+    rate_list[["R_depletion"]] <- setNames(c(-1), "R")
   return(rate_list)
 }
 
@@ -57,11 +63,13 @@ rates <- function(state, config, t) {
     }
     # Calculate growth rates including mutations
     growth_rates <- replication_rates %*% mutation
+    # Calculate the outflow rates
+    outflow_rates <- flow * state[names]
     # Calculate nutrient depletion rate
-    N_depletion <- sum(replication_rates * alpha)
+    R_depletion <- sum(replication_rates * alpha) + flow * R
     # Combine all rates and return
-    rate_list <- c(growth_rates, N_depletion)
-    return(setNames(rate_list, c(names, "R")))
+    rate_list <- c(growth_rates, flow * R0, outflow_rates, R_depletion)
+    return(setNames(rate_list, rep(c(names, "R"), 2)))
   })
 }
 
@@ -129,14 +137,15 @@ simulate <- function(
   tau = 3, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
   R0 = 1e9, # initial nutrient concentration
-  mu = 1e-9, # rate of mutations conferring resistance to drug 1
+  mu = 1e-9, # rate of beneficial mutations per replication
   N = 1e9, # (1/D) of the initial wild type population
   num_mutants = NULL, # number of mutants
   loci = NULL, # number of mutable loci in the genome
   r = 1, # wild type growth rate with infinite resources
   w = 0.1, # mean fitness effect size of beneficial mutation
   k = 1e8, # [R] at half-max growth rate
-  alpha = 1 # nutrients used per replication
+  alpha = 1, # nutrients used per replication
+  flow = 0 # chemostat flow rate
   ) {
   # Define the parameters of the model
   if (is.numeric(num_mutants)) {
@@ -207,7 +216,7 @@ log_plot <- function(solutions, type = "all") {
     stop("type must be 'all', 'median' or 'mean'")
   }
   filtered <- summary %>%
-    filter(!(variable %in% c("R"))) %>%
+    # filter(!(variable %in% c("R"))) %>%
     mutate(variable = factor(variable, levels = unique(variable))) %>%
     arrange(variable)
   # Initialise the colours
