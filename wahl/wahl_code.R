@@ -136,7 +136,7 @@ simulate <- function(
   max_step = Inf, # SSA max step parameter
   tau = 3, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
-  R0 = 1e9, # initial nutrient concentration
+  R0 = 1e9, # media nutrient concentration
   mu = 1e-9, # rate of beneficial mutations per replication
   N = 1e9, # (1/D) of the initial wild type population
   num_mutants = NULL, # number of mutants
@@ -145,7 +145,8 @@ simulate <- function(
   w = 0.1, # mean fitness effect size of beneficial mutation
   k = 1e8, # [R] at half-max growth rate
   alpha = 1, # nutrients used per replication
-  flow = 0 # chemostat flow rate
+  flow = 0, # chemostat flow rate
+  equilibrate = TRUE # whether to start the population at equilibrium
   ) {
   # Define the parameters of the model
   if (is.numeric(num_mutants)) {
@@ -168,7 +169,11 @@ simulate <- function(
         }
       }
   }
-  init <- setNames(c(round(N * D), rep(0, length(names) - 1), R0), c(names, "R"))
+  if (equilibrate) {
+    # Calculate the equilibrium population size
+    N <- find_W(r, D, R0, k, tau, flow)
+  }
+  init <- setNames(c(round(N * D), rep(0, length(names) - 1), R0 - N * D), c(names, "R"))
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
