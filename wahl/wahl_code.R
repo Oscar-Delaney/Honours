@@ -6,6 +6,40 @@ library(future)
 library(future.apply)
 library(R.utils)
 
+# resources ODE solving
+R_ode <- function(R0, r, D, c, k, tau) {
+  # Define the ODE
+  ode_func <- function(t, state, parameters) {
+    with(as.list(c(state, parameters)), {
+      dR <- r*(R-c)/(1+k/R)
+      return(list(dR))
+    })
+  }
+  
+  # Solve the ODE
+  parameters <- c(r = r, D = D, c = c, k = k, tau = tau)
+  state <- c(R = R0)
+  times <- seq(from = 0, to = tau, length.out = 1e2)
+  out <- ode(y = state, times = times, func = ode_func, parms = parameters, method = "rk4")
+  out
+  # Compute c - R(tau)
+  R_tau <- out[nrow(out), "R"]
+  return(R_tau)
+}
+
+# Function to find R(0) that makes c - R(tau) = 0
+find_W <- Vectorize(function(r, D, c, k, tau, flow = 1) {
+  # Define the function to be passed to uniroot
+  func <- function(R0) c * (1 - D) + R_ode(R0, r, D, c, k, tau) * D - R0
+  if (tau == 0 | D == 1) return(c - k/(r / flow - 1))
+  if (tau < -log(D) / r * (1 + k / c)) return(0)
+  # Use uniroot to find the root
+  root <- uniroot(func, interval = c(1, c - 1))
+  W_tau <- (c - root$root) / D
+  return(W_tau)
+}
+)
+
 # a growth rate function for nutrient-limited growth
 monod <- function(R, r, k) {
   return(r * ifelse(k == 0, 1, 1 / (1 + k / R)))
