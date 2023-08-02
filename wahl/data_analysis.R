@@ -9,7 +9,7 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
         k_ratio <- res *
             ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
         data <- simulate(
-            seed = i,
+            # seed = i,
             rep = rep,
             time = time,
             dt = 1e-1,
@@ -20,8 +20,8 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
             R0 = 1e9,
             k = 1e9 * k_ratio,
             alpha = 1 * res,
-            r = r * (1 + k_ratio), # Adaptivetau step size
-            # causes observed growth rate to be lower than expected
+            r = r * (1 + k_ratio), # * ifelse(D == 1, 1, 1.023),
+            # Adaptivetau causes observed growth rate to be lower than expected
             w = w,
             mu = mu,
             N = 1e9,
@@ -29,6 +29,7 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
             loci = loci
         )
         summary[i, c("rate", "ci_lower", "ci_upper")] <- func(data)
+        # summary[i, "total_pop"] <- log10(mean(total_pop(data[[1]], strains = "W")))
         print(i / nrow(summary))
     }
     return(summary)
@@ -53,7 +54,7 @@ theory <- function(D, r, w) {
 
 # Approximate rate function
 approx1_theory <- function(D, r, w) {
-    return(r * w * log(D^-1) / (D^-1 -1))
+    return(r * w * ifelse(D == 1, 1, log(D^-1) / (D^-1 -1)))
 }
 
 # Even more approximate rate function
