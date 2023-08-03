@@ -8,7 +8,8 @@ library(gridExtra)
 r <- 1 # resource unconstrained growth rate
 r_adj <- 1.023 # adjustment for non-infinitesmal step size
 r_res <- 1.5 # resource constrained growth rate
-w <- 0.1
+media <- 1e9 # resource concentration in dilution media
+w <- 0.1 # average selective benefit
 fig_dir <- "C:/Users/s4528540/Documents/Oscar Honours/Honours/wahl/figs"
 data_dir <- "C:/Users/s4528540/Downloads/results"
 
@@ -18,6 +19,7 @@ custom_theme <- theme(
     legend.position = "bottom",
     legend.text = element_text(size = 20),
     legend.title = element_text(size = 20),
+    strip.text = element_text(size = 20),
     legend.key.size = unit(1.5, "cm"),
   )
 
@@ -83,7 +85,8 @@ constrained <- function(summary) {
             y = expression(paste(italic(tau), " (hours)")),
             fill = "fixation rate") +
         theme_minimal() +
-        custom_theme
+        custom_theme +
+        facet_grid(rows = vars(type))
     return(p)
 }
 
@@ -97,7 +100,7 @@ for (i in 1:5) {
     time = 30,
     tau = log(10),
     D = 0.1,
-    R0 = 1e9,
+    media = 1e9,
     mu = 3e-9,
     N = 1e9,
     num_mutants = 9,
@@ -158,31 +161,28 @@ dev.off()
 
 ### fig constrained
 
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
-summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
+summary <- expand.grid(D = 10 ^ - seq(0, 4, by = 0.5), tau = 24 * 2 ^ - seq(0, 6.5, by = 1.5))
+summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE)
 theory_data <- summary
-theory_data$rate <- approx1_theory(summary$D, r = - log(summary$D) / summary$tau, w = 0.1) * 1e-9 *
-    find_W(r = r_res, D = summary$D, c = 1e9, tau = summary$tau, k = 1e8)
+theory_data$rate <- theory_res(theory_data$D, theory_data$tau, r_res * 2)
+theory_data$type <- as.factor("theory")
+summary$type <- as.factor("simulation")
+summary <- rbind(summary, theory_data)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_constrained.rdata"))
 
 # save the plot
 pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 10)
-grid.arrange(
-    constrained(summary),
-    constrained(theory_data),
-    ncol = 2
-)
+constrained(summary)
 dev.off()
 
 ### fig:tau24
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
 summary <- run_sims(summary, rep = 2e3, r = r_res * r_adj, res = TRUE)
-summary$theory <- approx1_theory(summary$D, r = - log(summary$D) / summary$tau, w = 0.1) * 1e-9 *
-    find_W(r = r_res * 2, D = summary$D, c = 1e9, tau = summary$tau, k = 1e9)
-summary$theory - summary$theory2
+summary$theory <- theory_res(summary$D, summary$tau, r_res * 2)
+
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
 
@@ -201,8 +201,7 @@ summary <- expand.grid(D = 10 ^ - seq(0, 4, by = 0.1),
 summary$tau <- - log(summary$D)
 summary$k <- as.factor(summary$k_ratio * 1e9)
 summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
-summary$theory <- approx1_theory(summary$D, r = 1, w = 0.1) * 1e-9 *
-    find_W(r = r_res / r_adj * (1 + summary$k_ratio), D = summary$D, c = 1e9, tau = summary$tau, k = 1e9 * summary$k_ratio)
+summary$theory <- theory_res(summary$D, summary$tau, r_res * (1 + summary$k_ratio), k = 1e9 * summary$k_ratio)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_k_variation_optimal2.rdata"))
@@ -221,7 +220,7 @@ dev.off()
 ### fig:t_distribution
 D <- 10^-0.1
 data <- simulate(seed = 1, time = 50, rep = 5e2, dt = 1e-2, max_step = 1e-2,
-    D = D,  w = w, tau = -log(D), R0 = 1e9, N = 1e9,
+    D = D,  w = w, tau = -log(D), media = 1e9, N = 1e9,
     mu = 1e-8, k = 0, alpha = 0, r = r * r_adj, num_mutants = 2e2)
 final_counts <- fixed(data)[[1]]
 
