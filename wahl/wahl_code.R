@@ -11,7 +11,7 @@ RW_ode <- function(W0, r, D, media, k, tau, alpha = 1) {
   # Define the ODE
   ode_func <- function(t, state, parameters) {
     with(as.list(c(state, parameters)), {
-      dW <- W * r / (1 + k / R)
+      dW <- W * monod(R, r, k)
       dR <- -dW * alpha
       return(list(c(dW = dW, dR = dR)))
     })
@@ -199,7 +199,7 @@ simulate <- function(
         }
       }
   }
-  if (equilibrate) {
+  if (equilibrate & alpha != 0 & k != 0) {
     # Calculate the equilibrium population size
     N <- find_W(r, D, media, k, tau, flow)
   }
