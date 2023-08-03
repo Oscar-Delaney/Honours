@@ -7,7 +7,7 @@ library(future.apply)
 library(R.utils)
 
 # resources ODE solving
-RW_ode <- function(W0, r, D, c, k, tau, alpha = 1) {
+RW_ode <- function(W0, r, D, media, k, tau, alpha = 1) {
   # Define the ODE
   ode_func <- function(t, state, parameters) {
     with(as.list(c(state, parameters)), {
@@ -18,20 +18,20 @@ RW_ode <- function(W0, r, D, c, k, tau, alpha = 1) {
   }
 
   # Solve the ODE
-  parameters <- c(r = r, D = D, c = c, k = k, tau = tau, alpha = alpha)
-  out <- ode(y = c(W = W0, R = c - W0), times = c(0, tau),
+  parameters <- c(r = r, D = D, media = media, k = k, tau = tau, alpha = alpha)
+  out <- ode(y = c(W = W0, R = media - W0), times = c(0, tau),
     func = ode_func, parms = parameters)
   return(out[nrow(out), "W"])
 }
 
-# Function to find R(0) that makes c - R(tau) = 0
-find_W <- Vectorize(function(r, D, c, k, tau, flow = 1, alpha = 1) {
+# Find the equilibrium final bacterial population
+find_W <- Vectorize(function(r, D, media, k, tau, flow = 1, alpha = 1) {
   # Define the function to be passed to uniroot
-  func <- function(W0) log(W0 / RW_ode(W0, r, D, c, k, tau, alpha) / D)
-  if (tau == 0 | D == 1) return(c - k/(r / flow - 1))
-  if (tau < -log(D) / r * (1 + k / c)) return(0)
+  func <- function(W0) log(W0 / RW_ode(W0, r, D, media, k, tau, alpha) / D)
+  if (tau == 0 | D == 1) return(media - k/(r / flow - 1))
+  if (tau < -log(D) / r * (1 + k / media)) return(0)
   # Use uniroot to find the root
-  root <- uniroot(func, interval = c(1, c - 1))
+  root <- uniroot(func, interval = c(1, media - 1))
   return(root$root / D)
 }
 )
@@ -50,7 +50,7 @@ mutant_fitness <- function(num_mutants, r, w, names) {
 bottleneck <- function(state, config) {
   with(config, {
     pops <- setNames(rbinom(length(names), state[names], D), names)
-    R <- state["R"] * D + R0 * (1 - D)
+    R <- state["R"] * D + media * (1 - D)
     return(c(pops, R))
   })
 }
@@ -98,7 +98,7 @@ rates <- function(state, config, t) {
     # Calculate nutrient depletion rate
     R_depletion <- sum(replication_rates * alpha) + flow * R
     # Combine all rates and return
-    rate_list <- c(growth_rates, flow * R0, outflow_rates, R_depletion)
+    rate_list <- c(growth_rates, flow * media, outflow_rates, R_depletion)
     return(setNames(rate_list, rep(c(names, "R"), 2)))
   })
 }
@@ -166,7 +166,7 @@ simulate <- function(
   max_step = Inf, # SSA max step parameter
   tau = 3, # frequency of bottlenecks, in hours
   D = 0.1, # dilution ratio at bottlenecks
-  R0 = 1e9, # media nutrient concentration
+  media = 1e9, # media nutrient concentration
   mu = 1e-9, # rate of beneficial mutations per replication
   N = 1e9, # (1/D) of the initial wild type population
   num_mutants = NULL, # number of mutants
@@ -201,9 +201,9 @@ simulate <- function(
   }
   if (equilibrate) {
     # Calculate the equilibrium population size
-    N <- find_W(r, D, R0, k, tau, flow)
+    N <- find_W(r, D, media, k, tau, flow)
   }
-  init <- setNames(c(round(N * D), rep(0, length(names) - 1), R0 - N * D), c(names, "R"))
+  init <- setNames(c(round(N * D), rep(0, length(names) - 1), media - N * D), c(names, "R"))
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
