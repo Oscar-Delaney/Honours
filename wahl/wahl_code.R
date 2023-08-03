@@ -7,34 +7,32 @@ library(future.apply)
 library(R.utils)
 
 # resources ODE solving
-R_ode <- function(R0, r, D, c, k, tau) {
+RW_ode <- function(W0, r, D, c, k, tau, alpha = 1) {
   # Define the ODE
   ode_func <- function(t, state, parameters) {
     with(as.list(c(state, parameters)), {
-      dR <- r*(R-c)/(1+k/R)
-      return(list(dR))
+      dW <- W * r / (1 + k / R)
+      dR <- -dW * alpha
+      return(list(c(dW = dW, dR = dR)))
     })
   }
-  
+
   # Solve the ODE
-  parameters <- c(r = r, D = D, c = c, k = k, tau = tau)
-  out <- ode(y = c(R = R0), times = c(0, tau), func = ode_func, parms = parameters)
-  out
-  # Compute c - R(tau)
-  R_tau <- out[nrow(out), "R"]
-  return(R_tau)
+  parameters <- c(r = r, D = D, c = c, k = k, tau = tau, alpha = alpha)
+  out <- ode(y = c(W = W0, R = c - W0), times = c(0, tau),
+    func = ode_func, parms = parameters)
+  return(out[nrow(out), "W"])
 }
 
 # Function to find R(0) that makes c - R(tau) = 0
-find_W <- Vectorize(function(r, D, c, k, tau, flow = 1) {
+find_W <- Vectorize(function(r, D, c, k, tau, flow = 1, alpha = 1) {
   # Define the function to be passed to uniroot
-  func <- function(R0) log((c - R0) / (c - R_ode(R0, r, D, c, k, tau)) / D)
+  func <- function(W0) log(W0 / RW_ode(W0, r, D, c, k, tau, alpha) / D)
   if (tau == 0 | D == 1) return(c - k/(r / flow - 1))
   if (tau < -log(D) / r * (1 + k / c)) return(0)
   # Use uniroot to find the root
   root <- uniroot(func, interval = c(1, c - 1))
-  W_tau <- (c - root$root) / D
-  return(W_tau)
+  return(root$root / D)
 }
 )
 
