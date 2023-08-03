@@ -54,19 +54,19 @@ theory <- function(D, r, w) {
 
 # Approximate rate function
 approx1_theory <- function(D, r, w) {
-    return(r * w * ifelse(D == 1, 1, log(D^-1) / (D^-1 -1)))
+    return(r * w / (1 + w) * ifelse(D == 1, 1, log(D^-1) / (D^-1 -1)))
 }
 
 # Even more approximate rate function
 approx2_theory <- function(D, r, w) {
-    return(r * w * sqrt(D))
+    return(r * w / (1 + w) * sqrt(D))
 }
 
 # theoretical resource constrained adaptation rate
 theory_res <- function(D, tau, r, w = 0.1, media = 1e9, k = 1e9, mu = 1e-9, flow = 1) {
-    N <- find_W(r, D, media, k, tau, flow)
+    N <- ifelse(k == 0, media, find_W(r, D, media, k, tau, flow))
     x <- ifelse(D == 1 | tau == 0, flow, log(D) ^ 2 / (1 / D - 1) / tau)
-    return(w * mu * N * x) #  / (1 + w)
+    return(w / (1 + w) * mu * N * x) #  / (1 + w)
 }
 
 # rate at a given time within [0, tau)
