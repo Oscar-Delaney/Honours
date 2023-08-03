@@ -17,7 +17,7 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9,
             max_step = Inf,
             D = D,
             flow = ifelse(D == 1, flow, 0),
-            R0 = 1e9,
+            media = 1e9,
             k = 1e9 * k_ratio,
             alpha = 1 * res,
             r = r * (1 + k_ratio), # * ifelse(D == 1, 1, 1.023),
@@ -60,6 +60,13 @@ approx1_theory <- function(D, r, w) {
 # Even more approximate rate function
 approx2_theory <- function(D, r, w) {
     return(r * w * sqrt(D))
+}
+
+# theoretical resource constrained adaptation rate
+theory_res <- function(D, tau, r, w = 0.1, media = 1e9, k = 1e9, mu = 1e-9, flow = 1) {
+    N <- find_W(r, D, media, k, tau, flow)
+    x <- ifelse(D == 1 | tau == 0, flow, log(D) ^ 2 / (1 / D - 1) / tau)
+    return(w * mu * N * x) #  / (1 + w)
 }
 
 # rate at a given time within [0, tau)
