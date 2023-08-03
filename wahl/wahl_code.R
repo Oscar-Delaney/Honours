@@ -18,9 +18,7 @@ R_ode <- function(R0, r, D, c, k, tau) {
   
   # Solve the ODE
   parameters <- c(r = r, D = D, c = c, k = k, tau = tau)
-  state <- c(R = R0)
-  times <- seq(from = 0, to = tau, length.out = 1e2)
-  out <- ode(y = state, times = times, func = ode_func, parms = parameters, method = "rk4")
+  out <- ode(y = c(R = R0), times = c(0, tau), func = ode_func, parms = parameters)
   out
   # Compute c - R(tau)
   R_tau <- out[nrow(out), "R"]
@@ -30,7 +28,7 @@ R_ode <- function(R0, r, D, c, k, tau) {
 # Function to find R(0) that makes c - R(tau) = 0
 find_W <- Vectorize(function(r, D, c, k, tau, flow = 1) {
   # Define the function to be passed to uniroot
-  func <- function(R0) c * (1 - D) + R_ode(R0, r, D, c, k, tau) * D - R0
+  func <- function(R0) log((c - R0) / (c - R_ode(R0, r, D, c, k, tau)) / D)
   if (tau == 0 | D == 1) return(c - k/(r / flow - 1))
   if (tau < -log(D) / r * (1 + k / c)) return(0)
   # Use uniroot to find the root
