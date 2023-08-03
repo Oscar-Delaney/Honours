@@ -160,20 +160,29 @@ dev.off()
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
 summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
+theory_data <- summary
+theory_data$rate <- approx1_theory(summary$D, r = - log(summary$D) / summary$tau, w = 0.1) * 1e-9 *
+    find_W(r = r_res, D = summary$D, c = 1e9, tau = summary$tau, k = 1e8)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_constrained.rdata"))
 
 # save the plot
 pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 10)
-constrained(summary)
+grid.arrange(
+    constrained(summary),
+    constrained(theory_data),
+    ncol = 2
+)
 dev.off()
 
 ### fig:tau24
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
 summary <- run_sims(summary, rep = 2e3, r = r_res * r_adj, res = TRUE)
-
+summary$theory <- approx1_theory(summary$D, r = - log(summary$D) / summary$tau, w = 0.1) * 1e-9 *
+    find_W(r = r_res * 2, D = summary$D, c = 1e9, tau = summary$tau, k = 1e9)
+summary$theory - summary$theory2
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
 
@@ -181,39 +190,31 @@ save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
 pdf(paste0(fig_dir, "/tau24.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
-    geom_point(aes(x = D, y = rate), size = 3)
+    geom_point(aes(x = D, y = rate), size = 3) +
+    geom_line(aes(x = D, y = theory), size = 1)
 dev.off()
 
 ### fig:k_variation_optimal
 
-summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1),
+summary <- expand.grid(D = 10 ^ - seq(0, 4, by = 0.1),
     k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
-summary$k <- as.factor(round(10^(as.numeric(summary$k_ratio)+6), 3))
 summary$k <- as.factor(summary$k_ratio * 1e9)
 summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
-theory_data <- data.frame(
-    D = unique(summary$D),
-    rate = theory(unique(summary$D), r = 1, w = 0.1),
-    theory = "unconstrained"
-)
+summary$theory <- approx1_theory(summary$D, r = 1, w = 0.1) * 1e-9 *
+    find_W(r = r_res / r_adj * (1 + summary$k_ratio), D = summary$D, c = 1e9, tau = summary$tau, k = 1e9 * summary$k_ratio)
 
 # Save the summary to a file
-save(summary, file = paste0(data_dir, "/fig_k_variation_optimal.rdata"))
+save(summary, file = paste0(data_dir, "/fig_k_variation_optimal2.rdata"))
 load(paste0(data_dir, "/fig_k_variation_optimal.rdata"))
 # save the plot
 pdf(paste0(fig_dir, "/k_variation_optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k),
         linewidth = 0.8) +
-    geom_line(aes(x = D, y = rate, color = k), size = 1) +
-    geom_line(data = theory_data, aes(x = D, y = rate, linetype = theory), size = 1) +
+    geom_line(aes(x = D, y = theory, color = k), size = 1) +
     geom_point(aes(x = D, y = rate, color = k), size = 3) +
-    scale_color_scico_d(palette = "roma") +
-    scale_linetype_manual(values = c("unconstrained" = "dashed")) +
-    labs(linetype = NULL) +
-    theme(legend.text = element_text(size = 17),
-    legend.title = element_text(size = 17))
+    scale_color_scico_d(palette = "roma")
 dev.off()
 
 
