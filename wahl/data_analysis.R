@@ -64,6 +64,7 @@ approx2_theory <- function(D, r, w) {
 
 # theoretical resource constrained adaptation rate
 theory_res <- function(D, tau, r, w = 0.1, media = 1e9, k = 1e9, mu = 1e-9, flow = 1) {
+    k <- rep(k, length(D))
     N <- ifelse(k == 0, media, find_W(r, D, media, k, tau, flow))
     x <- ifelse(D == 1 | tau == 0, flow, log(D) ^ 2 / (1 / D - 1) / tau)
     return(w / (1 + w) * mu * N * x) #  / (1 + w)
@@ -78,11 +79,11 @@ rate_at_t <- function(D, r, w, t) {
 # Count the number of mutants likely en route to fixation
 fixed <- function(data) {
     # find the time just after the last bottleneck
-    endpoint <- data[[1]] %>%
+    endpoint <- min(50, data[[1]] %>%
         filter(variable == "W", rep == 1) %>%
         filter(value - lag(value) < 0) %>%
         tail(1) %>%
-        pull(time)
+        pull(time))
     # find the likelihood of a new mutation at t=0 going extinct
     current_phi <- phi(data[[2]]$D, data[[2]]$w)
     # count the number of each mutant at the endpoint
