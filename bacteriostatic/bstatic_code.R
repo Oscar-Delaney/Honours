@@ -129,10 +129,12 @@ mono_plot <- function(summary, series, lower, upper, ylab, text){
     return(p)
 }
 
+data_dir <- "C:/Users/s4528540/Downloads/results/static"
+
 ### Figure 1
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.1), bcidal2 = 0,
+summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
     therapy = "Combination", resources = "Abundant")
-mono_high_res <- run_sims(summary, delta = 0.6, rep = 1e2,
+mono_high_res <- run_sims(summary, delta = 0.6, rep = 1e3,
     influx = c(A = 10, B = 0), m_B = 0)
 sol <- run_sims(summary[1, ], delta = 0.6, rep = 1e1,
     influx = c(A = 10, B = 0), m_B = 0, data = TRUE)
@@ -143,33 +145,40 @@ mono1 <- mono_plot(mono_high_res, "pop", "pop_wmin", "pop_ymax", "Total S popula
 mono2 <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "C")
 
 # print as a pdf
-pdf("bacteriostatic/fig1.pdf", width = 20, height = 10)
+pdf("bacteriostatic/fig1.pdf", width = 30, height = 10)
 grid.arrange(dynamics, mono1, mono2, ncol = 3, padding = unit(5, "cm"))
 dev.off()
 
+save(mono_high_res, file = paste0(data_dir, "/fig1.rdata"))
 
 ### Figure 2
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.1), bcidal2 = seq(0, 1, 0.1),
+summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
     therapy = c("Cycling", "Combination"), resources = c("Abundant", "Limiting"))
-summary <- run_sims(summary, rep = 1e2)
+summary <- run_sims(summary, rep = 1e3)
 
 pdf("bacteriostatic/fig2.pdf", width = 20, height = 20)
 main_plot(summary)
 dev.off()
 
+save(summary, file = paste0(data_dir, "/fig2.rdata"))
+
 ### Figure S1
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.2), bcidal2 = seq(0, 1, 0.2),
+summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
     therapy = c("Cycling"), resources = c("Abundant")) 
-cs <- run_sims(summary, rep = 1e2, zeta1 = c(S = 1, RA = 28, RB = 0.5, RAB = 28),
+cs <- run_sims(summary, rep = 1e3, zeta1 = c(S = 1, RA = 28, RB = 0.5, RAB = 28),
     zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = 0.25)
 
 pdf("bacteriostatic/figS1.pdf", width = 10, height = 10)
 main_plot(cs)
 dev.off()
 
+save(cs, file = paste0(data_dir, "/figS1.rdata"))
+
 ### Figure S2
-quick_degrade <- run_sims(summary, rep = 1e2, influx = 10 * c(A = 1, B = 1), d_ = 0.4, delta = 0.6)
+quick_degrade <- run_sims(summary, rep = 1e3, influx = 10 * c(A = 1, B = 1), d_ = 0.4, delta = 0.6)
 
 pdf("bacteriostatic/figS2.pdf", width = 10, height = 10)
 main_plot(quick_degrade)
 dev.off()
+
+save(quick_degrade, file = paste0(data_dir, "/figS2.rdata"))
