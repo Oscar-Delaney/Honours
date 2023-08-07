@@ -513,3 +513,42 @@ D <- 10 ^ - seq(0, 4, 0.1)
 W <- find_W(r_res * 2 * (1 + kr), D, 1e9, 1e9 * kr, - log(D), 1)
 plot(D, W, log = "xy", cex.axis = 2, cex.lab = 2)
 
+return(setNames(r * (1 + c(0, rep(w, num_mutants))), names))
+
+summary <- expand.grid(D = 10 ^ - seq(0.1, 2, by = 0.1), tau = 24)
+summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE, mu = 0)
+summary$theory <- (1 - phi(summary$D, w)) * 100 / 48
+base_plot(summary) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
+    geom_point(aes(x = D, y = rate), size = 3) +
+    geom_line(aes(x = D, y = theory), size = 1)
+
+### s variation testing
+
+summary <- expand.grid(s = seq(0.1, 2, by = 0.1))
+for (i in seq_len(nrow(summary))) {
+    data[[i]] <- simulate(num_mutants = 100, rep = 1e2, time = 5, tau = 1,
+        D = exp(-1), w = summary$s[i], r = r * r_adj, alpha = 0, k = 0)
+    summary[i, c("rate", "ci_lower", "ci_upper")] <- metric(data[[i]])
+    print(i / nrow(summary))
+}
+log_plot(data[[20]][[1]][data[[1]][[1]]$rep <= 10, ])
+summary$theory <- theory(exp(-1), r, summary$s)
+summary$theory2 <- approx1_theory(exp(-1), r, summary$s)
+summary$theory3 <- theory_res(exp(-1), 1, 1, w = summary$s, k = 0)
+base_plot(summary) +
+    geom_errorbar(aes(x = s, ymin = ci_lower, ymax = ci_upper),
+        linewidth = 0.8) +
+    geom_line(aes(x = s, y = theory), size = 1) +
+    geom_point(aes(x = s, y = rate), size = 3) +
+    scale_color_scico_d(palette = "roma")
+plot(summary$s, summary$rate, log = "y", cex.axis = 2, cex.lab = 2)
+
+
+summary <- expand.grid(D = 10 ^ - seq(0.1, 2, by = 0.2), tau = 24)
+summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE, mu = 0)
+summary$theory <- (1 - phi(summary$D, w)) * 100 / 48
+base_plot(summary) +
+    geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
+    geom_point(aes(x = D, y = rate), size = 3) +
+    geom_line(aes(x = D, y = theory), size = 1)
