@@ -161,7 +161,7 @@ dev.off()
 
 ### fig constrained
 
-summary <- expand.grid(D = 10 ^ - seq(0, 4, by = 0.5), tau = 24 * 2 ^ - seq(0, 6.5, by = 1.5))
+summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
 summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE)
 theory_data <- summary
 theory_data$rate <- theory_res(theory_data$D, theory_data$tau, r_res * 2)
@@ -185,7 +185,7 @@ summary$theory <- theory_res(summary$D, summary$tau, r_res * 2)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
-
+load(paste0(data_dir, "/fig_tau24.rdata"))
 # save the plot
 pdf(paste0(fig_dir, "/tau24.pdf"), width = 10, height = 10)
 base_plot(summary) +
@@ -205,7 +205,7 @@ summary$theory <- theory_res(summary$D, summary$tau, r_res * (1 + summary$k_rati
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_k_variation_optimal2.rdata"))
-load(paste0(data_dir, "/fig_k_variation_optimal.rdata"))
+load(paste0(data_dir, "/fig_k_variation_optimal2.rdata"))
 # save the plot
 pdf(paste0(fig_dir, "/k_variation_optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
