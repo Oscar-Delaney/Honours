@@ -42,13 +42,13 @@ influx = 3 * c(A = 1, B = 1), m_A = 1e-9, m_B = 1e-9, d_ = 0, data = FALSE) {
     summary$bstatic2 <- 1 - summary$bcidal2
     for (i in seq_len(nrow(summary))) {
         cycl <- ifelse(summary$therapy[i] == "Cycling", TRUE, FALSE)
-        d <- d_ + ifelse(cycl, 0.1, 0.3)
+        d <- d_ + ifelse(cycl, 0.1, 0.35)
         sol <- simulate(
-            init = c(S = ifelse(cycl, 3e8, 1e9), RA = 0, RB = 0, RAB = 0),
+            init = c(S = ifelse(cycl, 5e8, 1e10), RA = 0, RB = 0, RAB = 0),
             N0 = ifelse(summary$resources[i] == "Abundant", 1e11, 1e8),
             k = 1e8,
             alpha = 1,
-            supply = 2e8,
+            supply = 1e8,
             mu = 1,
             bcidal1 = summary$bcidal1[i],
             bcidal2 = summary$bcidal2[i],
@@ -56,12 +56,12 @@ influx = 3 * c(A = 1, B = 1), m_A = 1e-9, m_B = 1e-9, d_ = 0, data = FALSE) {
             bstatic2 = summary$bstatic2[i],
             zeta1 = zeta1,
             zeta2 = zeta2,
-            delta = delta,
+            delta = ifelse(summary$resources[i] == "Abundant", 0.4, 0.3),
             time = 60,
             tau = 1e4,
             rep = rep,
             dose_gap = dose_gap,
-            influx = influx,
+            influx =  influx * (1 + !cycl),
             cycl = cycl,
             m_A = m_A, m_B = m_B,
             d1 = d, d2 = d
