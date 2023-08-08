@@ -290,7 +290,7 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9, dt 
 
 # theoretical resource constrained adaptation rate
 theory <- function(D, tau, r, w = 0.1, media = 1e9, k = 1e9, mu = 1e-9, flow = 1, alpha = 1) {
-    k <- rep(k, length(D))[seq_along(length(D))]
+    k <- rep(k, length(D))[seq_along(D)]
     N <- ifelse(k == 0 | alpha == 0, media, find_W(r, D, media, k, tau, flow, alpha))
     x <- ifelse(D == 1 | tau == 0, flow, log(D) ^ 2 / (1 / D - 1) / tau)
     return(w / (1 + w) * mu * N * x)
