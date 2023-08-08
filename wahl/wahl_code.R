@@ -36,6 +36,11 @@ find_W <- Vectorize(function(r, D, media, k, tau, flow = 1, alpha = 1) {
 }
 )
 
+# Probability a new mutant at the beginning of a growth phase will go extinct
+phi <- function(D, s) {
+    return(ifelse(D == 1, 1 / (1 + s), (1 - D) / (D ^ -s - D)))
+}
+
 # a growth rate function for nutrient-limited growth
 monod <- function(R, r, k) {
   return(r * ifelse(k == 0, 1, 1 / (1 + k / R)))
@@ -115,7 +120,6 @@ single_run <- function(config, x) {
     } else {
       config$r_vec <- r * t(1 + as.matrix(genotypes) %*% rexp(loci, 1 / w))
     }
-    time_grid <- seq(0, time, by = dt) # a common time grid for all runs
     bottlenecks <- unique(round(c(seq(0, time, tau), time), 10))
     for (t in bottlenecks[-length(bottlenecks)]) {
       # Determine the time until the next bottleneck or dose
@@ -150,10 +154,21 @@ single_run <- function(config, x) {
       setNames(approx_vars, colnames(solution)),
       rep = x
     )
-    # add a new row at the end with the r_vec
-    solution_interpolated[nrow(solution_interpolated) + 1, ] <-
-      c(pi * 1e6, (config$r_vec / r) - 1, 0, x)
-    return(solution_interpolated)
+    if (summarize) {
+      # count the number of each mutant at the endpoint
+      long <- pivot_longer(solution_interpolated, cols = -c(time, rep), names_to = "variable")
+      final_counts <- long %>%
+          group_by(rep, variable) %>%
+          filter(time == endpoint, !(variable %in% c("W", "R"))) %>%
+          summarise(final_value = value, .groups = "keep") %>%
+          mutate(p_fix = 1 - current_phi ^ final_value)
+      return(final_counts)
+    } else {
+      # add a new row at the end with the r_vec
+      solution_interpolated[nrow(solution_interpolated) + 1, ] <-
+        c(pi * 1e6, (config$r_vec / r) - 1, 0, x)
+      return(solution_interpolated)
+    }
   })
 }
 
@@ -176,7 +191,8 @@ simulate <- function(
   k = 1e8, # [R] at half-max growth rate
   alpha = 1, # nutrients used per replication
   flow = 0, # chemostat flow rate
-  equilibrate = TRUE # whether to start the population at equilibrium
+  equilibrate = TRUE, # whether to start the population at equilibrium
+  summarize = FALSE # whether to return a summary of the final population
   ) {
   # Define the parameters of the model
   if (is.numeric(num_mutants)) {
@@ -204,92 +220,109 @@ simulate <- function(
     N <- find_W(r, D, media, k, tau, flow)
   }
   init <- setNames(c(round(N * D), rep(0, length(names) - 1), media - N * D), c(names, "R"))
+  # find the time just after the last bottleneck
+  time_grid <- seq(0, time, by = dt) # a common time grid for all runs
+  endpoint <- min(time_grid[time_grid > (time - time %% tau)])
+  if (D == 1) {endpoint <- time}
+  # find the likelihood of a new mutation at t=0 going extinct
+  current_phi <- phi(D, w)
   config <- as.list(environment())
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
   set.seed(seed) # set the seed for reproducibility
-  solutions <- bind_rows(future_lapply(1:rep, function(x) {
+  long <- bind_rows(future_lapply(1:rep, function(x) {
     single_run(config, x)},
     future.seed = TRUE))
-  # Convert the solutions to long format
-  long <- pivot_longer(solutions, cols = -c(time, rep), names_to = "variable")
-  config$s_all <- long %>% filter(near(time, pi * 1e6)) %>% select(-time)
-  long <- long[!near(long$time, pi * 1e6), ]
+  if (!summarize) {
+    # Convert the solutions to long format
+    long <- pivot_longer(long, cols = -c(time, rep), names_to = "variable")
+    config$s_all <- long %>% filter(near(time, pi * 1e6)) %>% select(-time)
+    long <- long[!near(long$time, pi * 1e6), ]
+  }
   return(list(long, config))
 }
 
-log_plot <- function(solutions, type = "all") {
-  # Choose the type of central tendency and range to plot
-  if (type == "mean") {
-    summary <- solutions %>%
-      group_by(time, variable) %>%
-      reframe(
-        central = mean(value),
-        se = sd(value) / sqrt(n()),
-        lower = max(0, central - 1.96 * se),
-        upper = central + 1.96 * se,
-        rep = 1
-      )
-  } else if (type == "median") {
-    summary <- solutions %>%
-      group_by(time, variable) %>%
-      reframe(
-        IQR_bounds = list(quantile(value, c(0.25, 0.5, 0.75))),
-        rep = 1
-      ) %>%
-      # convert the list of quantiles to individual columns
-      mutate(
-        lower = map_dbl(IQR_bounds, 1),
-        central = map_dbl(IQR_bounds, 2),
-        upper = map_dbl(IQR_bounds, 3)
-      ) %>%
-      select(-IQR_bounds)
-  } else if (type == "all") {
-    summary <- solutions
-    colnames(summary)[colnames(summary) == "value"] <- "central"
-  } else {
-    stop("type must be 'all', 'median' or 'mean'")
-  }
-  filtered <- summary %>%
-    # filter(!(variable %in% c("R"))) %>%
-    mutate(variable = factor(variable, levels = unique(variable))) %>%
-    arrange(variable)
-  # Initialise the colours
-  colors <- c("black", hcl.colors(length(levels(filtered$variable)) - 1, "Dark 2"))
-  peak <- max(solutions$value, na.rm = TRUE)
-  # Create the plot
-  plot <- ggplot() +
-    geom_line(data = filtered, aes(x = time, y = central, color = variable,
-      linetype = factor(rep)), linewidth = 1 + 0.5 / max(filtered$rep)) +
-    scale_color_manual(values = colors) +
-    scale_linetype_manual(values = rep("solid", max(filtered$rep))) +
-    guides(linetype = "none") +
-    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-      breaks = 10^seq(0, 20),
-      labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    labs(
-      title = "Bacterial growth over time",
-      x = "Time (hours)",
-      y = "Population Size",
-      color = "Strain",
-      fill = "Strain"
-    ) +
-    theme_light() +
-    theme(
-      legend.position = "bottom",
-      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
-      axis.title = element_text(size = 25, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 20),
-      legend.text = element_text(size = 20)
-    )
-  # Add the confidence intervals
-  if (type %in% c("mean", "median") && max(solutions$rep) > 1) {
-    plot <- plot +
-      geom_ribbon(data = filtered, alpha = 0.3,
-        aes(x = time, ymin = lower, ymax = upper, fill = variable)) +
-      scale_fill_manual(values = colors)
-  }
-  # Display the plot
-  print(plot)
+# Generate and analyse data
+run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9, dt = 1e-2,
+    res = TRUE, flow = 1, num_mutants = 1e2, loci = NULL, summarize = TRUE) {
+    for (i in seq_len(nrow(summary))) {
+        D <- summary$D[i]
+        tau <- summary$tau[i]
+        k_ratio <- res *
+            ifelse("k_ratio" %in% names(summary), summary$k_ratio[i], 1)
+        data <- simulate(
+            seed = i,
+            rep = rep,
+            time = time,
+            dt = dt,
+            tau = ifelse(tau == 0, 1e4, tau),
+            max_step = Inf,
+            D = D,
+            flow = ifelse(D == 1, flow, 0),
+            media = 1e9,
+            k = 1e9 * k_ratio,
+            alpha = 1 * res,
+            r = r * (1 + k_ratio),
+            w = w,
+            mu = mu,
+            N = 1e9,
+            num_mutants = num_mutants,
+            loci = loci,
+            summarize = summarize
+        )
+        if (summarize) {
+            fixed <- data[[1]] %>%
+                group_by(rep) %>%
+                summarise(n = sum(final_value > 1e1), n_hat = sum(p_fix))
+            # estimate the fixation rate and store this
+            fixation_rate <- fixed$n_hat / data[[2]]$endpoint
+            se <- sd(fixation_rate) / sqrt(length(fixation_rate))
+            ci <- mean(fixation_rate) + se * qnorm(c(0.5, 0.025, 0.975))
+        } else {
+            func <- ifelse(is.null(loci), metric, metric_ci)
+            ci <- func(data)
+        }
+        summary[i, c("rate", "ci_lower", "ci_upper")] <- ci
+        print(i / nrow(summary))
+    }
+    return(summary)
+}
+
+# theoretical resource constrained adaptation rate
+theory <- function(D, tau, r, w = 0.1, media = 1e9, k = 1e9, mu = 1e-9, flow = 1, alpha = 1) {
+    k <- rep(k, length(D))[seq_along(length(D))]
+    N <- ifelse(k == 0 | alpha == 0, media, find_W(r, D, media, k, tau, flow, alpha))
+    x <- ifelse(D == 1 | tau == 0, flow, log(D) ^ 2 / (1 / D - 1) / tau)
+    return(w / (1 + w) * mu * N * x)
+}
+
+# rate at a given time within [0, tau)
+rate_at_t <- function(D, r, w, t) {
+    u <- D * exp(r * t)
+    theta <- (1 / D - 1) / (1 - D ^ w)
+    return(r^2 / -log(D) * (u / (1 + theta * u ^ (1 + w))))
+}
+
+metric_ci <- function(data) {
+    # find the number of each genotype at the endpoint
+    final <- data[[1]] %>%
+        filter(time == max(time), variable != "R")
+    # Note which mutations each genotype has
+    for (i in 1:data[[2]]$loci) {
+        final[[paste0("M", i)]] <- substring(final$variable, i + 1, i + 1) == "1"
+    }
+    # Calculate the abundance and probability for each mutation
+    counts <- final %>%
+        pivot_longer(
+            cols = starts_with("M"),
+            names_to = "Mutant",
+            values_to = "Mutant_value"
+        ) %>%
+        group_by(rep, Mutant) %>%
+        summarise(p = sum(value * Mutant_value) / sum(value), .groups = "keep")
+    # estimate the fixation rate and store this
+    se <- sd(counts$p) / sqrt(length(counts$p))
+    mean <- mean(counts$p)
+    vec <- mean + se * qnorm(c(0.5, 0.025, 0.975))
+    return(vec)
 }
