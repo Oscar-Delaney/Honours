@@ -1,6 +1,4 @@
 source("wahl/wahl_code.R")
-source("wahl/data_analysis.R")
-library(hypergeo)
 library(scales)
 library(scico)
 library(gridExtra)
@@ -17,9 +15,9 @@ custom_theme <- theme(
     axis.title = element_text(size = 25),
     axis.text = element_text(size = 25),
     legend.position = "bottom",
-    legend.text = element_text(size = 20),
-    legend.title = element_text(size = 20),
-    strip.text = element_text(size = 20),
+    legend.text = element_text(size = 25),
+    legend.title = element_text(size = 25),
+    strip.text = element_text(size = 25),
     legend.key.size = unit(1.5, "cm"),
   )
 
@@ -72,6 +70,10 @@ dynamics <- function(data, part) {
 }
 
 constrained <- function(summary) {
+    label_data <- data.frame(type = c("simulation", "theory"),
+                         D = min(summary$D),
+                         tau = max(summary$tau),
+                         label = c("A", "B"))
     p <- ggplot(summary, aes(x = D, y = tau)) +
         geom_tile(aes(fill = log10(rate))) +
         scale_x_continuous(trans = scales::log10_trans(),
@@ -86,7 +88,9 @@ constrained <- function(summary) {
             fill = "fixation rate") +
         theme_minimal() +
         custom_theme +
-        facet_grid(rows = vars(type))
+        facet_grid(rows = vars(type)) +
+        geom_text(data = label_data, aes(x = D, y = tau, label = label), 
+              hjust = 0, vjust = 1, size = 15, inherit.aes = FALSE)
     return(p)
 }
 
@@ -130,58 +134,43 @@ dev.off()
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
 summary <- run_sims(summary, rep = 1e3, r = r * r_adj, w = w, res = FALSE)
+summary$theory <- theory(summary$D, summary$tau, r, w, k = 0)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_optimality_unconstrained.rdata"))
-
-# Define linetypes and palettes for theory lines
-labels <- c("exact", "approximation")
-linetype_palette <- setNames(c("solid", "dashed"), labels)
-color_palette <- setNames(scico(2, palette = "roma"), labels)
-
-# Define theory data
-theory_data <- pivot_longer(data.frame(
-    D = summary$D,
-    exact = theory(summary$D, r, w),
-    approximation = approx1_theory(summary$D, r, w)
-    ),
-cols = -D, names_to = "variable", values_to = "value")
-theory_data$variable <- factor(theory_data$variable, levels = labels)
+load(paste0(data_dir, "/fig_optimality_unconstrained.rdata"))
 
 # save the plot
 pdf(paste0(fig_dir, "/optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.6) +
-    geom_line(data = theory_data, aes(x = D, y = value, color = variable, linetype = variable), linewidth = 1.5) +
     geom_point(aes(x = D, y = rate), size = 3) +
-    scale_color_manual(values = color_palette) +
-    scale_linetype_manual(values = linetype_palette) +
-    labs(color = NULL, linetype = NULL)
+    geom_line(aes(x = D, y = theory), linewidth = 1)
 dev.off()
 
 ### fig constrained
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
-summary <- run_sims(summary, rep = 1e2, r = r_res * r_adj, res = TRUE)
+summary <- run_sims(summary, rep = 1e3, r = r_res, res = TRUE)
 theory_data <- summary
-theory_data$rate <- theory_res(theory_data$D, theory_data$tau, r_res * 2)
+theory_data$rate <- theory(theory_data$D, theory_data$tau, r_res * 2)
 theory_data$type <- as.factor("theory")
 summary$type <- as.factor("simulation")
 summary <- rbind(summary, theory_data)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_constrained.rdata"))
-
+load(paste0(data_dir, "/fig_constrained.rdata"))
 # save the plot
-pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 10)
+pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 15)
 constrained(summary)
 dev.off()
 
 ### fig:tau24
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24)
-summary <- run_sims(summary, rep = 2e3, r = r_res * r_adj, res = TRUE)
-summary$theory <- theory_res(summary$D, summary$tau, r_res * 2)
+summary <- run_sims(summary, rep = 2e3, r = r_res, res = TRUE)
+summary$theory <- theory(summary$D, summary$tau, r_res * 2)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_tau24.rdata"))
@@ -191,7 +180,7 @@ pdf(paste0(fig_dir, "/tau24.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
     geom_point(aes(x = D, y = rate), size = 3) +
-    geom_line(aes(x = D, y = theory), size = 1)
+    geom_line(aes(x = D, y = theory), linewidth = 1)
 dev.off()
 
 ### fig:k_variation_optimal
@@ -200,8 +189,8 @@ summary <- expand.grid(D = 10 ^ - seq(0, 4, by = 0.1),
     k_ratio = 10 ^ seq(-2, 1, by = 1))
 summary$tau <- - log(summary$D)
 summary$k <- as.factor(summary$k_ratio * 1e9)
-summary <- run_sims(summary, rep = 1e3, r = r_res * r_adj, res = TRUE)
-summary$theory <- theory_res(summary$D, summary$tau, r_res * (1 + summary$k_ratio), k = 1e9 * summary$k_ratio)
+summary <- run_sims(summary, rep = 1e3, time = 20, r = r_res, res = TRUE)
+summary$theory <- theory(summary$D, summary$tau, r_res * (1 + summary$k_ratio), k = 1e9 * summary$k_ratio)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_k_variation_optimal2.rdata"))
@@ -211,7 +200,7 @@ pdf(paste0(fig_dir, "/k_variation_optimal.pdf"), width = 10, height = 10)
 base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper, color = k),
         linewidth = 0.8) +
-    geom_line(aes(x = D, y = theory, color = k), size = 1) +
+    geom_line(aes(x = D, y = theory, color = k), linewidth = 1) +
     geom_point(aes(x = D, y = rate, color = k), size = 3) +
     scale_color_scico_d(palette = "roma")
 dev.off()
@@ -219,10 +208,14 @@ dev.off()
 
 ### fig:t_distribution
 D <- 10^-0.1
-data <- simulate(seed = 1, time = 50, rep = 5e2, dt = 1e-2, max_step = 1e-2,
+data <- simulate(seed = 1, time = 50, rep = 1e2, dt = 1e-2, max_step = 1e-2,
     D = D,  w = w, tau = -log(D), media = 1e9, N = 1e9,
     mu = 1e-8, k = 0, alpha = 0, r = r * r_adj, num_mutants = 2e2)
-final_counts <- fixed(data)[[1]]
+final_counts <- data[[1]] %>%
+        group_by(rep, variable) %>%
+        filter(time == data[[2]]$endpoint, !(variable %in% c("W", "R"))) %>%
+        summarise(final_value = value, .groups = "keep") %>%
+        mutate(p_fix = 1 - data[[2]]$current_phi ^ final_value)
 
 mutation_times <- data[[1]] %>%
     filter(value == 0) %>%
@@ -243,7 +236,7 @@ t_theory$rate <- t_theory$rate / sum(t_theory$rate * 0.001)
 # save the plot
 pdf(paste0(fig_dir, "/t_distribution.pdf"), width = 10, height = 10)
 ggplot(t_data, aes(x = last_zero)) +
-  geom_density(aes(y = ..density.., weight = p_fix),
+  geom_density(aes(y = after_stat(density), weight = p_fix),
     adjust = 1 / 2, fill = "grey", alpha = 1, bw = 0.01) +
   geom_line(data = t_theory, aes(x = t, y = rate, color = "theory")) +
   scale_color_manual(name = NULL, values = c("theory" = "blue")) +
@@ -273,7 +266,7 @@ pdf(paste0(fig_dir, "/s_distribution.pdf"), width = 10, height = 10)
 ggplot(s_data, aes(x = value)) +
   # raise p_fix to a high power to ensure mutations actually very likely to fix
   # are the ones that dominate the distribution
-  geom_density(aes(y = ..density.., weight = p_fix ^ 20),
+  geom_density(aes(y = after_stat(density), weight = p_fix ^ 20),
     adjust = 1 / 2, fill = "grey", alpha = 1, bw = 0.01) +
   geom_line(data = s_theory, aes(x = s, y = fix, color = "fixing")) +
   geom_line(data = s_theory, aes(x = s, y = arise, color = "arising")) +
@@ -347,7 +340,7 @@ summary$tau <- -log(summary$D) / r
 summary <- with(summary, {
     summary$det_bin <- D * (1 - phi(D, w)) * (tau ^ !div_tau)
     summary$det_poi <- 2 * w * D * (log(D)^2) / (tau ^ div_tau)
-    summary$sto_bin <- theory(D, r, w) * (tau ^ !div_tau)
+    summary$sto_bin <- theory(D, tau, r, w, k = 0) * (tau ^ !div_tau)
     summary$sto_poi <- D * (1 - D ^ w) * (tau ^ !div_tau)
     return(summary)
 })
@@ -372,8 +365,8 @@ dev.off()
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1))
 summary$tau <- - log(summary$D)
-summary <- run_sims(summary, rep = 2e2, time = 1e3, r = r_res * r_adj,
-    loci = 4, num_mutants = NULL, res = TRUE)
+summary <- run_sims(summary, rep = 2e2, time = 1e3, r = r_res,
+    loci = 4, num_mutants = NULL, res = TRUE, dt = 10, summarize = FALSE)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_ci.rdata"))
