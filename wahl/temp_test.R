@@ -552,3 +552,61 @@ base_plot(summary) +
     geom_errorbar(aes(x = D, ymin = ci_lower, ymax = ci_upper), linewidth = 0.8) +
     geom_point(aes(x = D, y = rate), size = 3) +
     geom_line(aes(x = D, y = theory), size = 1)
+
+# Get all objects in the global environment
+obj_names <- ls(envir = globalenv())
+
+# Calculate sizes of these objects
+obj_sizes <- sapply(obj_names, function(x) object.size(get(x)))
+
+# Sort objects by size
+sorted_obj_names <- names(sort(obj_sizes, decreasing = TRUE))
+
+# Display sorted objects with their sizes
+sorted_obj_sizes <- sort(obj_sizes, decreasing = TRUE)
+head(data.frame(Object = sorted_obj_names, Size = sorted_obj_sizes), n = 10)  # Adjust n to see more or fewer objects
+
+
+system.time(simulate(num_mutants = 100, rep = 100, dt = 1, max_step = 0.01))
+
+
+log_plot(data[[1]])
+num_mutants <- 1e2
+
+log_plot <- function(solutions, type = "all") {
+  summary <- solutions
+  filtered <- summary %>%
+    # filter(!(variable %in% c("R"))) %>%
+    mutate(variable = factor(variable, levels = unique(variable))) %>%
+    arrange(variable)
+  # Initialise the colours
+  colors <- c("black", hcl.colors(length(levels(filtered$variable)) - 1, "Dark 2"))
+  # Create the plot
+  plot <- ggplot() +
+    geom_line(data = filtered, aes(x = time, y = value, color = variable,
+      linetype = factor(rep)), linewidth = 1 + 0.5 / max(filtered$rep)) +
+    scale_color_manual(values = colors) +
+    scale_linetype_manual(values = rep("solid", max(filtered$rep))) +
+    guides(linetype = "none") +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+      breaks = 10^seq(0, 20),
+      labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    labs(
+      title = "Bacterial growth over time",
+      x = "Time (hours)",
+      y = "Population Size",
+      color = "Strain",
+      fill = "Strain"
+    ) +
+    theme_light() +
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 25, face = "bold"),
+      axis.text = element_text(size = 25),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20)
+    )
+  # Display the plot
+  print(plot)
+}
