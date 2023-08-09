@@ -70,10 +70,6 @@ dynamics <- function(data, part) {
 }
 
 constrained <- function(summary) {
-    label_data <- data.frame(type = c("simulation", "theory"),
-                         D = min(summary$D),
-                         tau = max(summary$tau),
-                         label = c("A", "B"))
     p <- ggplot(summary, aes(x = D, y = tau)) +
         geom_tile(aes(fill = log10(rate))) +
         scale_x_continuous(trans = scales::log10_trans(),
@@ -87,10 +83,7 @@ constrained <- function(summary) {
             y = expression(paste(italic(tau), " (hours)")),
             fill = "fixation rate") +
         theme_minimal() +
-        custom_theme +
-        facet_grid(rows = vars(type)) +
-        geom_text(data = label_data, aes(x = D, y = tau, label = label), 
-              hjust = 0, vjust = 1, size = 15, inherit.aes = FALSE)
+        custom_theme
     return(p)
 }
 
@@ -152,18 +145,36 @@ dev.off()
 
 summary <- expand.grid(D = 10 ^ - seq(0.1, 4, by = 0.1), tau = 24 * 2 ^ - seq(0, 6.5, by = 0.5))
 summary <- run_sims(summary, rep = 1e3, r = r_res, res = TRUE)
-theory_data <- summary
-theory_data$rate <- theory(theory_data$D, theory_data$tau, r_res * 2)
-theory_data$type <- as.factor("theory")
-summary$type <- as.factor("simulation")
-summary <- rbind(summary, theory_data)
 
 # Save the summary to a file
 save(summary, file = paste0(data_dir, "/fig_constrained.rdata"))
 load(paste0(data_dir, "/fig_constrained.rdata"))
 # save the plot
-pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 15)
+pdf(paste0(fig_dir, "/constrained.pdf"), width = 10, height = 10)
 constrained(summary)
+dev.off()
+
+theory_data <- summary
+theory_data$rate <- theory(theory_data$D, theory_data$tau, r_res * 2)
+comparison <- theory_data
+comparison$rate <- theory_data$rate / summary$rate
+
+pdf(paste0(fig_dir, "/constrained_comp.pdf"), width = 10, height = 20)
+grid.arrange(
+    constrained(summary) +
+        labs(fill = "numerical") +
+        annotate("text", x = 1e-4, y = 24, size = 15,
+            label = "A", fontface = "bold", hjust = 0, vjust = 1),
+    constrained(theory_data) +
+        labs(fill = "analytical") +
+        annotate("text", x = 1e-4, y = 24, size = 15,
+            label = "B", fontface = "bold", hjust = 0, vjust = 1),
+    constrained(comparison) +
+        labs(fill = "analytical/numerical") +
+        annotate("text", x = 1e-4, y = 24, size = 15,
+            label = "C", fontface = "bold", hjust = 0, vjust = 1),
+    ncol = 1
+)
 dev.off()
 
 ### fig:tau24
