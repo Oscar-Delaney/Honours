@@ -222,8 +222,7 @@ simulate <- function(
   init <- setNames(c(round(N * D), rep(0, length(names) - 1), media - N * D), c(names, "R"))
   # find the time just after the last bottleneck
   time_grid <- seq(0, time, by = dt) # a common time grid for all runs
-  endpoint <- min(time_grid[time_grid > (time - time %% tau)])
-  if (D == 1) {endpoint <- time}
+  endpoint <- ceiling((time - time %% tau) / dt) * dt
   # find the likelihood of a new mutation at t=0 going extinct
   current_phi <- phi(D, w)
   config <- as.list(environment())
@@ -255,7 +254,7 @@ run_sims <- function(summary, rep = 1, time = 50, w = 0.1, r = 1, mu = 1e-9, dt 
             rep = rep,
             time = time,
             dt = dt,
-            tau = ifelse(tau == 0, 1e4, tau),
+            tau = ifelse(tau == 0, time, tau),
             max_step = Inf,
             D = D,
             flow = ifelse(D == 1, flow, 0),
