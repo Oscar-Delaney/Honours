@@ -37,60 +37,60 @@ target_hit <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
 # Create a grid of parameter combinations
 # summary <- expand.grid(dose_rep = seq(1, 12, 1), kappa = seq(0.5, 3, 0.5))
 T <- 1
-summary <- expand.grid(bcidal1 = seq(0, T, 0.1), bcidal2 = seq(0, T, 0.1))
-summary$bstatic1 <- T - summary$bcidal1
-summary$bstatic2 <- T - summary$bcidal2
+summary <- expand.grid(cA = seq(0, T, 0.1), m_A = seq(0, 1e-9, 1e-10))
+summary$cB <- T - summary$cA
+summary$m_A_discrete <- as.factor(summary$m_A)
 data <- list()
 for (i in seq_len(nrow(summary))) {
-    data[[1]] <- simulate(
-        init = c(S = 3e7, R1 = 0, R2 = 0, R12 = 0),
-        N0 = 1e9,
+    data[[i]] <- simulate(
+        init = c(S = 1e9, RA = 0, RB = 0, RAB = 0),
+        N0 = 5e9,
         k = 1e0,
         alpha = 0,
         supply = 3e8,
         mu = 1,
-        bcidal1 = summary$bcidal1[i],
-        bcidal2 = summary$bcidal2[i],
-        bstatic1 = summary$bstatic1[i],
-        bstatic2 = summary$bstatic2[i],
-        zeta1 = c(S = 1, R1 = 28, R2 = 1, R12 = 28),
-        zeta2 = c(S = 1, R1 = 1, R2 = 28, R12 = 28),
-        i12 = 2, i21 = 2,
-        delta = 0.1,
-        time = 60,
+        bcidal1 = 1,
+        bcidal2 = 1,
+        time = 40,
         tau = 1e4,
         max_step = 1e-1,
         rep = 1e3,
         HGT = 0,
         dose_rep = 1,
-        dose_gap = 10,
-        influx = 3 * c(A1 = 1, A2 = 1),
-        cycl = TRUE,
-        m1 = 1e-9, m2 = 1e-9,
-        d1 = 0.1, d2 = 0.1,
+        dose_gap = 1e4,
+        influx = 5 * c(A = summary$cA[i], B = summary$cB[i]),
+        cycl = FALSE,
+        m_A = summary$m_A[i], m_B = 1e-9,
+        d1 = 0, d2 = 0,
         deterministic = FALSE
     )
-    wins <- target_hit(data[[1]][[1]], target = 1e2, strains = c("R1", "R2"))
+    # log_plot(data[[3]][[1]], use = c("S", "RA", "RB"))
+    wins <- target_hit(data[[i]][[1]], target = 1e2, strains = c("RA", "RB"))
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
     print(i / nrow(summary))
 }
-# log_plot(data[[1]][[1]][data[[1]][[1]]$rep <= 10, ], use = c("S", "R1", "R2", "N"))
+# log_plot(data[[1]][[1]][data[[1]][[1]]$rep <= 10, ])
 
-ggplot(summary, aes(x = bcidal1 / T, y = bcidal2 / T)) +
-    geom_tile(aes(fill = 1 - wins)) +
-    scale_fill_gradient(low = "white", high = "blue") +
-    labs(x = "bcidal1", y = "bcidal2", fill = "P(extinct)") +
-    theme_minimal() +
+# plot with one independent variable and one dependent variable
+ggplot(summary[summary$m_A == 0e-10,], aes(x = cA / T, y = wins, color = m_A_discrete)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
+    theme_light() +
+    scale_y_continuous(limits = c(0, 1)) +
+    labs(
+        x = "proportion of dose that is A",
+        y = "Probability that resistance emerges"
+    ) +
     theme(
+        plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
         axis.title = element_text(size = 25, face = "bold"),
         axis.text = element_text(size = 25),
-        legend.title = element_text(size = 20),
-        legend.text = element_text(size = 20),
-        legend.position = "bottom",
-        legend.key.width = unit(2, "cm")
+        legend.title = element_text(size = 25),
+        legend.text = element_text(size = 25),
+        legend.position = "bottom"
     )
 
 summary
@@ -123,23 +123,6 @@ for (i in seq_len(nrow(summary))) {
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
 }
-# plot with one independent variable and one dependent variable
-ggplot(summary, aes(x = bcidal1 / T, y = wins)) +
-    geom_point(size = 3) +
-    geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
-    theme_light() +
-    # scale_x_log10() +
-    scale_y_continuous(limits = c(0, 1)) +
-    # scale_y_log10(limits = c(1, 1e11)) +
-    labs(
-        x = "Mode (0 = bacteriostatic, 1 = bactericidal)",
-        y = "Probability that resistance emerges in 100 hours"
-    ) +
-    theme(
-        plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
-        axis.title = element_text(size = 25, face = "bold"),
-        axis.text = element_text(size = 25)
-    )
 
 
 # plot with two independent variables and one dependent variable
