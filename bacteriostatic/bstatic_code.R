@@ -69,9 +69,9 @@ influx = 3 * c(A = 1, B = 1), m_A = 1e-9, m_B = 1e-9, d_ = 0, data = FALSE) {
         wins <- 1 - target_hit(sol, target = 1e2, strains = c("RA", "RB"))
         summary[i, c("wins", "ymin", "ymax")] <- c(mean(wins),
             binom.test(sum(wins), length(wins))$conf.int)
-        total <- total_pop(sol)
-        summary[i, c("pop", "pop_wmin", "pop_ymax")] <- c(mean(total),
-            t.test(total)$conf.int)
+        # total <- total_pop(sol)
+        # summary[i, c("pop", "pop_wmin", "pop_ymax")] <- c(mean(total),
+        #     t.test(total)$conf.int)
         print(i / nrow(summary))
     }
     if(data){
@@ -87,7 +87,7 @@ main_plot <- function(summary) {
     p <- ggplot(summary, aes(x = bcidal1, y = bcidal2)) +
         geom_tile(aes(fill = wins)) +
         scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1)) +
-        labs(x = expression(theta["BC, A"]), y = expression(theta["BC, B"]), fill = "P(extinct)") +
+        labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
         facet_grid(rows = vars(resources), cols = vars(therapy)) +
         theme_minimal() +
         theme(
@@ -111,7 +111,7 @@ mono_plot <- function(summary, series, lower, upper, ylab, text){
         geom_errorbar(aes(ymin = get(lower), ymax = get(upper))) +
         theme_light() +
         labs(
-            x = expression(theta["BC, A"]),
+            x = expression(theta["A"]),
             y = ylab
         ) +
         theme(
@@ -133,20 +133,20 @@ data_dir <- "C:/Users/s4528540/Downloads/results/static"
 
 ### Figure 1
 summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
-    therapy = "Combination", resources = "Abundant")
-mono_high_res <- run_sims(summary, delta = 0.6, rep = 1e3,
-    influx = c(A = 10, B = 0), m_B = 0)
-sol <- run_sims(summary[1, ], delta = 0.6, rep = 1e1,
-    influx = c(A = 10, B = 0), m_B = 0, data = TRUE)
+    therapy = "Cycling", resources = "Abundant")
+mono_high_res <- run_sims(summary, delta = 0.4, rep = 1e3,
+    influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0)
+sol <- run_sims(summary[nrow(summary), ], delta = 0.4, rep = 1e1,
+    influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0, data = TRUE)
 dynamics <- log_plot(sol, use = c("S", "RA", "RB", "RAB", "N")) +
     annotate("text", x = 0, y = Inf, label = "A", hjust = 0.5, vjust = 1,
         size = 15, fontface = "bold")
-mono1 <- mono_plot(mono_high_res, "pop", "pop_wmin", "pop_ymax", "Total S population", "B")
-mono2 <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "C")
+# mono1 <- mono_plot(mono_high_res, "pop", "pop_wmin", "pop_ymax", "Total S population", "B")
+mono2 <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "B")
 
 # print as a pdf
-pdf("bacteriostatic/fig1.pdf", width = 30, height = 10)
-grid.arrange(dynamics, mono1, mono2, ncol = 3, padding = unit(5, "cm"))
+pdf("bacteriostatic/fig1.pdf", width = 20, height = 10)
+grid.arrange(dynamics, mono2, ncol = 2)
 dev.off()
 
 save(mono_high_res, file = paste0(data_dir, "/fig1.rdata"))
