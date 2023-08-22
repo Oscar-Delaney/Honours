@@ -86,7 +86,6 @@ main_plot <- function(summary) {
     labels$label <- LETTERS[1:nrow(labels)]
     p <- ggplot(summary, aes(x = bcidal1, y = bcidal2)) +
         geom_tile(aes(fill = wins)) +
-        scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1)) +
         labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
         facet_grid(rows = vars(resources), cols = vars(therapy)) +
         theme_minimal() +
@@ -100,7 +99,11 @@ main_plot <- function(summary) {
             strip.text = element_text(size = 25, face = "bold")
         )
     if (nrow(unique(summary[, c("therapy", "resources")])) > 1) {
-        p <- p + geom_text(data = labels, aes(label = label), vjust = 0.7, hjust = 0.7, size = 15, fontface = "bold")
+        p <- p +
+            geom_text(data = labels, aes(label = label), vjust = 1, hjust = 0, size = 15, fontface = "bold") +
+            scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1))
+    } else {
+        p <- p + scale_fill_gradient(low = "white", high = "blue")
     }
     return(p)
 }
@@ -164,7 +167,7 @@ save(summary, file = "bacteriostatic/fig2.rdata")
 summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
     therapy = c("Cycling"), resources = c("Abundant"))
 cs <- run_sims(summary, rep = 1e3, zeta1 = c(S = 1, RA = 28, RB = 0.5, RAB = 28),
-    zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = 0.25)
+    zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = 0.1)
 
 pdf("bacteriostatic/figS1.pdf", width = 10, height = 10)
 main_plot(cs)
@@ -173,12 +176,13 @@ dev.off()
 save(cs, file = "bacteriostatic/figS1.rdata")
 
 ### Figure S2
-quick_degrade <- run_sims(summary, rep = 1e3, influx = 30 * c(A = 1, B = 1), d_ = 0.4, delta = 0.4)
+quick_degrade <- run_sims(summary, rep = 1e3, influx = 30 * c(A = 1, B = 1), d_ = 0.4, delta = 0.3)
+
 pdf("bacteriostatic/figS2.pdf", width = 10, height = 10)
 main_plot(quick_degrade)
 dev.off()
 
-save(quick_degrade, "bacteriostatic/figS2.rdata")
+save(quick_degrade, file = "bacteriostatic/figS2.rdata")
 
 ### Figure S3
 pre_existing <- run_sims(summary, rep = 1e3, m_A = 0, m_B = 0, init_B = 5, delta = 0.1)
