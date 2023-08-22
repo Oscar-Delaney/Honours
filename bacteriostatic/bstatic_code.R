@@ -130,15 +130,16 @@ mono_plot <- function(summary, series, lower, upper, ylab, text){
 }
 
 ### Figure 1
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
-    therapy = "Cycling", resources = "Abundant")
-mono_high_res <- run_sims(summary, delta = 0.4, rep = 1e3,
-    influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0)
-sol <- run_sims(summary[nrow(summary), ], delta = 0.4, rep = 1e1,
+sol <- run_sims(summary[nrow(summary), ], rep = 1e1,
     influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0, data = TRUE)
 dynamics <- log_plot(sol, use = c("S", "RA", "RB", "RAB", "N")) +
     annotate("text", x = 0, y = Inf, label = "A", hjust = 0.5, vjust = 1,
         size = 15, fontface = "bold")
+
+summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
+    therapy = "Cycling", resources = "Abundant")
+mono_high_res <- run_sims(summary, rep = 1e3,
+    influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0)
 mono <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "B")
 
 # print as a pdf
