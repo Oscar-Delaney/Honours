@@ -12,32 +12,34 @@ in a bacterial population. It uses the Adaptive Tau package to stochastify
 an ODE model. For details see Delaney, Engelstaedter, and Letten (forthcoming).
 Contact Oscar Delaney on o.delaney@uq.net.au with any errors or suggestions."
 
-drugs_text <- "A1 and A2 are arbitrary antibiotics. The mutation rate
+drugs_text <- "A and B are arbitrary antibiotics. The mutation rate
 is the proportion of genome replications that result in resistance to 
 that drug. The elimination rate is the rate at which the drug degenerates
 in the body, in units of hours^-1. The influx is the concentration of
 each drug added at bottleneck events, in units of zeta (see pharmacodynamics).
-The recombination rate determines the rate at which the S + R12 <--> R1 + R2
+The recombination rate determines the rate at which the S + RAB <--> RA + RB
 reversible reaction occurs, with reasonable values being <1e-13 or so."
 
 growth_text <- "The rows represent four bacterial strains: Susceptible, 
-Antibiotic_1 resistant, Antibiotic_2 resistant, and double resistant. 
-Init is the starting population size of each straing. Mu is the growth
+A-resistant, B-resistant, and double resistant. 
+Init is the starting population size of each strain. Mu is the growth
 rate with unlimited nutrients. K is the nutrient concentration that produces 
 half the maximal growth rate. Alpha is the amount of nutrients used per new
 bacterial cell."
 
 events_text <- "The two possible time-discontinuous features of the model
 are dosing with antibiotics, and bottlenecks where the population size is
-reduced proportionally and new nutrients are added. Drugs can be set to
+reduced proportionally and new nutrients are added. Supply determines the rate
+at which resources are continuously dded to the system. Drugs can be set to
 disappear when the next dose arrives, which is less realistic but sometimes
 convenient, or to persist through dosing."
 
-pd_text <- "Phi_i is the maximum reduction in growth rate caused by
-antibiotic i. Zeta_i is the concentration of antibiotic i resulting in half
-the maximal death rate. Kappa_i is the shape parameter, with smaller values
-representing a steep initial increase in death rate, and shallow gradient about
-zeta_i. Theta is the drug-drug interaction parameter, in the range [-1,1]."
+pd_text <- "Bcidal_i is the maximum death rate caused by drug i. Bstatic_i is
+the maximum proportional reduction in growth rate caused by drug i. Zeta_i is
+the concentration of antibiotic i resulting in half the maximal death rate.
+Kappa_i is the shape parameter, with smaller values representing a steep
+initial increase in death rate, and shallow gradient about zeta_i.
+Delta is the intrinsic death rate independent of drugs."
 
 # Default values
 drugs_default <- matrix(
@@ -48,39 +50,41 @@ drugs_default <- matrix(
     ),
     nrow = 2, ncol = 3,
     dimnames = list(
-        c("A1", "A2"),
+        c("A", "B"),
         c("Mutation rate", "Elimination rate", "Influx")
     )
 )
 
 growth_default <- matrix(
     c(
-        "1e+12", 0, 0, 0, # init: initial populations
+        "1e+9", 0, 0, 0, # init: initial populations
         0.88 * c(1, 0.9, 0.9, 0.81), # mu: growth rates
         c(1e14, 1e14, 1e14, 1e14), # k: nutrients at half-maximal growth rate
         1, 1, 1, 1 # alpha: resources used per unit growth
     ),
     nrow = 4, ncol = 4,
     dimnames = list(
-        c("S", "R1", "R2", "R12"),
+        c("S", "RA", "RB", "RAB"),
         c("Init", "Mu", "K", "Alpha")
     )
 )
 
 pd_default <- matrix(
     c(
-        0.6, 0.6, 0.6, 0.6, # phi1
+        1, 1, 1, 1, # Bcidal1
+        0, 0, 0, 0, # Bstatic1
         1, 28, 1, 28, # zeta1
         1, 1, 1, 1, # kappa1
-        0.6, 0.6, 0.6, 0.6, # phi2
+        1, 1, 1, 1, # Bcidal2
+        0, 0, 0, 0, # Bstatic2
         1, 1, 28, 28, # zeta2
         1, 1, 1, 1, # kappa2
-        0, 0, 0, 0 # theta
+        0, 0, 0, 0 # delta
     ),
-    nrow = 4, ncol = 7,
+    nrow = 4, ncol = 9,
     dimnames = list(
-        c("S", "R1", "R2", "R12"),
-        c("Phi1", "Zeta1", "Kappa1", "Phi2", "Zeta2", "Kappa2", "Theta")
+        c("S", "RA", "RB", "RAB"),
+        c("Bcidal1", "Bstatic1", "Zeta1", "Kappa1", "Bcidal2", "Bstatic2", "Zeta2", "Kappa2", "Delta")
     )
 )
 
@@ -111,6 +115,7 @@ events_content <- wellPanel(
     p(events_text),
     numericInput("tau", "Bottleneck frequency (hours)", value = 10, step = 1),
     numericInput("N0", "Bottleneck Nutrient pulse", value = "1e15", step = 1e9),
+    numericInput("supply", "Nutrient supply rate (hours^-1)", value = 0, step = 1e9),
     numericInput("D", "Bottleneck Dilution fraction", value = 1e-1, step = 0.1),
     numericInput("dose_gap", "Gap between doses (hours)", value = 10, step = 1),
     numericInput("dose_rep", "Drug cycling period (doses)", value = 1, step = 1),
@@ -168,26 +173,27 @@ server <- function(input, output, session) {
             dose_rep = input$dose_rep,
             dose_gap = input$dose_gap,
             keep_old_drugs = input$keep_old_drugs,
-            bactericidal = input$bactericidal,
             time = input$time,
             tau = input$tau,
             dt = input$dt,
             N0 = input$N0,
             D = input$D,
             HGT = input$HGT,
-            m1 = input$drugs["A1", "Mutation rate"],
-            m2 = input$drugs["A2", "Mutation rate"],
-            d1 = input$drugs["A1", "Elimination rate"],
-            d2 = input$drugs["A2", "Elimination rate"],
+            m_A = input$drugs["A", "Mutation rate"],
+            m_B = input$drugs["B", "Mutation rate"],
+            d1 = input$drugs["A", "Elimination rate"],
+            d2 = input$drugs["B", "Elimination rate"],
             influx = input$drugs[, "Influx"],
             init = input$growth[, c("Init")],
-            phi1 = input$pd[, "Phi1"],
+            bcidal1 = input$pd[, "Bcidal1"],
+            bstatic1 = input$pd[, "Bstatic1"],
             zeta1 = input$pd[, "Zeta1"],
             kappa1 = input$pd[, "Kappa1"],
-            phi2 = input$pd[, "Phi2"],
+            bcidal2 = input$pd[, "Bcidal2"],
+            bstatic2 = input$pd[, "Bstatic2"],
             zeta2 = input$pd[, "Zeta2"],
             kappa2 = input$pd[, "Kappa2"],
-            theta = input$pd[, "Theta"],
+            delta = input$pd[, "Delta"],
             mu = input$growth[, "Mu"],
             k = input$growth[, "K"],
             alpha = input$growth[, "Alpha"]
