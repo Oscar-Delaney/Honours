@@ -36,35 +36,35 @@ target_hit <- function(sol, target = 1, strains = c("S", "R1", "R2", "R12")) {
 
 # Create a grid of parameter combinations
 # summary <- expand.grid(dose_rep = seq(1, 12, 1), kappa = seq(0.5, 3, 0.5))
-T <- 1
-summary <- expand.grid(cA = seq(0, T, 0.1), m_A = seq(0, 1e-9, 1e-10))
-summary$cB <- T - summary$cA
-summary$m_A_discrete <- as.factor(summary$m_A)
+auc <- 20
+gap <- 10
+summary <- expand.grid(d = seq(0, 0.4, 0.03), kappa = seq(0.5, 3, 0.5))
+summary$c0 <- auc * with(summary, ifelse(d == 0, 1 / gap, d / (1 - exp(-d * gap))))
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[i]] <- simulate(
-        init = c(S = 1e9, RA = 0, RB = 0, RAB = 0),
-        N0 = 5e9,
-        k = 1e0,
+        init = c(S = 3e8, RA = 0, RB = 0, RAB = 0),
+        N0 = 1e9,
+        k = 0,
         alpha = 0,
-        supply = 3e8,
+        supply = 1e8,
         mu = 1,
-        bcidal1 = 1,
-        bcidal2 = 1,
+        bcidal1 = 2,
+        bcidal2 = 2,
         time = 40,
         tau = 1e4,
         max_step = 1e-1,
         rep = 1e3,
         HGT = 0,
         dose_rep = 1,
-        dose_gap = 1e4,
-        influx = 5 * c(A = summary$cA[i], B = summary$cB[i]),
-        cycl = FALSE,
-        m_A = summary$m_A[i], m_B = 1e-9,
-        d1 = 0, d2 = 0,
-        deterministic = FALSE
+        dose_gap = gap,
+        influx = summary$c0[i] * c(A = 1, B = 1),
+        cycl = TRUE,
+        keep_old_drugs = FALSE,
+        d1 = summary$d[i], d2 = summary$d[i],
+        deterministic = FALSE,
+        kappa1 = summary$kappa[i], kappa2 = summary$kappa[i]
     )
-    # log_plot(data[[3]][[1]], use = c("S", "RA", "RB"))
     wins <- target_hit(data[[i]][[1]], target = 1e2, strains = c("RA", "RB"))
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
@@ -72,17 +72,18 @@ for (i in seq_len(nrow(summary))) {
     summary$ymax[i] <- ci[2]
     print(i / nrow(summary))
 }
-# log_plot(data[[1]][[1]][data[[1]][[1]]$rep <= 10, ])
+log_plot(data[[4]][[1]][data[[1]][[1]]$rep <= 10, ])
 
 # plot with one independent variable and one dependent variable
-ggplot(summary[summary$m_A == 0e-10,], aes(x = cA / T, y = wins, color = m_A_discrete)) +
+ggplot(summary, aes(x = d, y = wins, color = as.factor(round(kappa, 3)))) +
     geom_point(size = 3) +
     geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
     theme_light() +
     scale_y_continuous(limits = c(0, 1)) +
     labs(
-        x = "proportion of dose that is A",
-        y = "Probability that resistance emerges"
+        x = "Drug elimination rate (d)",
+        y = "Probability that resistance emerges",
+        color = "Kappa"
     ) +
     theme(
         plot.title = element_text(size = 32, face = "bold", hjust = 0.5),
