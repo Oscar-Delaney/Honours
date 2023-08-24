@@ -74,7 +74,7 @@ init_B = 0, N0 = 1e8, data = FALSE) {
             binom.test(sum(wins), length(wins))$conf.int)
         print(i / nrow(summary))
     }
-    if(data){
+    if (data) {
         return(sol)
     } else {
         return(summary)
@@ -133,14 +133,13 @@ mono_plot <- function(summary, series, lower, upper, ylab, text){
 }
 
 ### Figure 1
+summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
+    therapy = "Cycling", resources = "Abundant")
 sol <- run_sims(summary[nrow(summary), ], rep = 1e1,
     influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0, data = TRUE)
 dynamics <- log_plot(sol, use = c("S", "RA", "RB", "RAB", "N")) +
     annotate("text", x = 0, y = Inf, label = "A", hjust = 0.5, vjust = 1,
         size = 15, fontface = "bold")
-
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
-    therapy = "Cycling", resources = "Abundant")
 mono_high_res <- run_sims(summary, rep = 1e3,
     influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0)
 mono <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "B")
@@ -155,20 +154,19 @@ save(mono_high_res, file = "bacteriostatic/fig1.rdata")
 ### Figure 2
 summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
     therapy = c("Combination", "Cycling"), resources = c("Abundant", "Intermediate", "Limiting"))
-summary <- run_sims(summary, rep = 1e3)
+multi <- run_sims(summary, rep = 1e3)
 
-pdf("bacteriostatic/fig2.pdf", width = 20, height = 20)
-main_plot(summary)
+pdf("bacteriostatic/fig2.pdf", width = 20, height = 25)
+main_plot(multi)
 dev.off()
 
-save(summary, file = "bacteriostatic/fig2.rdata")
+save(multi, file = "bacteriostatic/fig2.rdata")
 
 ### Figure S1
 summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
     therapy = c("Cycling"), resources = c("Abundant"))
 cs <- run_sims(summary, rep = 1e3, zeta1 = c(S = 1, RA = 28, RB = 0.5, RAB = 28),
-    zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = 0.1)
-
+    zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = -0.05, influx = 7 * c(A = 1, B = 1))
 pdf("bacteriostatic/figS1.pdf", width = 10, height = 10)
 main_plot(cs)
 dev.off()
