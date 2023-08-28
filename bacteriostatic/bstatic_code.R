@@ -1,38 +1,16 @@
 source("stochastic.R")
 library(gridExtra)
 
-# Total population
-total_pop <- function(sol, dt = 0.1, strains = "N_S") {
-  sol %>%
-    filter(variable %in% strains) %>%
-    group_by(rep) %>%
-    summarise(total = sum(value) * dt) %>%
-    pull(total)
-}
-
-# Final population
-final_pop <- function(sol, strains = c("N_S", "N_A", "N_B", "N_AB")) {
-  sol %>%
-    filter(time == max(time) & variable %in% strains) %>%
-    group_by(rep) %>%
-    summarise(final = sum(value)) %>%
-    pull(final)
-}
-
-# Time to reach target
-target_time <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")) {
-  sol %>%
-    filter(variable %in% strains) %>%
-    group_by(rep, time) %>%
-    summarise(total = sum(value), .groups = "drop") %>%
-    group_by(rep) %>%
-    summarise(t = time[min(which(diff(sign(total - target)) != 0), Inf)]) %>%
-    pull(t)
-}
-
 # Whether target was hit
-target_hit <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")) {
-  !is.na(target_time(sol, target, strains))
+target_hit <- function(sol, target = 1e2, strains = c("N_A", "N_B")) {
+    target_times <- sol %>%
+      filter(variable %in% strains) %>%
+      group_by(rep, time) %>%
+      summarise(total = sum(value), .groups = "drop") %>%
+      group_by(rep) %>%
+      summarise(t = time[min(which(diff(sign(total - target)) != 0), Inf)]) %>%
+      pull(t)
+    !is.na(target_times)
 }
 
 run_sims <- function(summary, zeta_A = c(N_S = 1, N_A = 28, N_B = 1, N_AB = 28),
@@ -48,7 +26,8 @@ init_B = 0, R0 = 1e8, data = FALSE) {
         d <- d_ + ifelse(cycl, 0.1, 0.35)
         sol <- simulate(
             seed = i,
-            init = c(N_S = ifelse(cycl, 5e8, 1e10), N_A = init_A, N_B = init_B, N_AB = 0),
+            init = c(N_S = ifelse(cycl, 5e8, 1e10),
+              N_A = init_A, N_B = init_B, N_AB = 0),
             R0 = R0 * 10 ^ res,
             k = 1e8,
             alpha = 1,
@@ -70,7 +49,7 @@ init_B = 0, R0 = 1e8, data = FALSE) {
             m_A = m_A, m_B = m_B,
             d_A = d, d_B = d
         )[[1]]
-        wins <- 1 - target_hit(sol, target = 1e2, strains = c("N_A", "N_B"))
+        wins <- 1 - target_hit(sol)
         summary[i, c("wins", "ymin", "ymax")] <- c(mean(wins),
             binom.test(sum(wins), length(wins))$conf.int)
         print(i / nrow(summary))
@@ -109,41 +88,32 @@ main_plot <- function(summary) {
     return(p)
 }
 
-mono_plot <- function(summary, series, lower, upper, ylab, text){
-    p <- ggplot(summary, aes(x = bcidal_A, y = get(series))) +
-        geom_point(size = 3) +
-        geom_errorbar(aes(ymin = get(lower), ymax = get(upper))) +
-        theme_light() +
-        labs(
-            x = expression(theta["A"]),
-            y = ylab
-        ) +
-        theme(
-            axis.title = element_text(size = 35),
-            axis.text = element_text(size = 25),
-            plot.margin = unit(c(0, 0, 0, 2), "cm")
-        ) + 
-        annotate("text", x = 0, y = Inf, label = text, hjust = 1, vjust = 1,
-            size = 15, fontface = "bold")
-    if(series == "wins"){
-        p <- p + scale_y_continuous(limits = c(0, 1))
-    } else {
-        p <- p + scale_y_log10(limits = c(1, 1e11))
-    }
-    return(p)
-}
-
 ### Figure 1
 summary <- expand.grid(bcidal_A = seq(0, 1, 0.05), bcidal_B = 0,
     therapy = "Cycling", resources = "Abundant")
 sol <- run_sims(summary[nrow(summary), ], rep = 1e1,
     influx = c(C_A = 6, C_B = 0), dose_gap = 5, m_B = 0, data = TRUE)
 dynamics <- log_plot(sol, use = c("N_S", "N_A", "R")) +
-    annotate("text", x = 0, y = Inf, label = "A", hjust = 0.5, vjust = 1,
+    annotate("text", x = 0, y = Inf, label = "A", hjust = 0.5, vjust = 1.5,
         size = 15, fontface = "bold")
 mono_high_res <- run_sims(summary, rep = 1e3,
     influx = c(C_A = 6, C_B = 0), dose_gap = 5, m_B = 0)
-mono <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "B")
+mono <- ggplot(mono_high_res, aes(x = bcidal_A, y = wins)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
+    scale_y_continuous(limits = c(0, 1)) +
+    theme_light() +
+    labs(
+        x = expression(theta["A"]),
+        y = "P(extinct)"
+    ) +
+    theme(
+        axis.title = element_text(size = 35),
+        axis.text = element_text(size = 25),
+        plot.margin = unit(c(0, 0, 0, 2), "cm")
+    ) +
+    annotate("text", x = 0, y = Inf, label = "B", hjust = 1, vjust = 1.5,
+        size = 15, fontface = "bold")
 
 # print as a pdf
 pdf("bacteriostatic/fig1.pdf", width = 20, height = 10)
@@ -191,47 +161,3 @@ main_plot(pre_existing)
 dev.off()
 
 save(pre_existing, file = "bacteriostatic/figS3.rdata")
-
-# Function to create a single plot given a subset of the data and title labels
-create_plot <- function(data_subset, label) {
-  p <- ggplot(data_subset, aes(x = bcidal_A, y = bcidal_B)) +
-    geom_tile(aes(fill = wins)) +
-    scale_fill_gradient(low = "white", high = "blue") +
-    labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
-    theme_minimal() +
-    theme(
-      axis.title = element_text(size = 35, face = "bold"),
-      axis.text = element_text(size = 25),
-      legend.title = element_text(size = 25),
-      legend.text = element_text(size = 20),
-      legend.position = "bottom",
-      legend.key.size = unit(2, "cm"),
-      strip.text = element_text(size = 25, face = "bold")
-    )
-  if (nrow(unique(data_subset[, c("therapy", "resources")])) == 1) {
-    print(label)
-    p <- p + geom_text(aes(x = 0, y = 1, label = label), vjust = 0.5, hjust = 0.5, size = 15, fontface = "bold")
-  }
-  return(p)
-}
-
-combined_plot <- function(summary) {
-  plots <- list()
-
-  therapies <- c("Combination", "Cycling")
-  resources <- c("Abundant", "Limiting")
-  labels <- c("A", "B", "C", "D")
-  idx <- 1
-
-  for (r in resources) {
-    for (t in therapies) {
-      subset_data <- subset(summary, therapy == t & resources == r)
-      plots[[paste(t, r)]] <- create_plot(subset_data, labels[idx])
-      idx <- idx + 1
-    }
-  }
-
-  grid.arrange(plots[[1]], plots[[2]], plots[[3]], plots[[4]], ncol = 2)
-}
-
-combined_plot(summary)
