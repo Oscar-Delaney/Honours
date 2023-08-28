@@ -17,19 +17,19 @@ is the proportion of genome replications that result in resistance to
 that drug. The elimination rate is the rate at which the drug degenerates
 in the body, in units of hours^-1. The influx is the concentration of
 each drug added at bottleneck events, in units of zeta (see pharmacodynamics).
-The recombination rate determines the rate at which the S + RAB <--> RA + RB
+The recombination rate determines the rate at which the N_S + N_AB <--> N_A + N_B
 reversible reaction occurs, with reasonable values being <1e-13 or so."
 
 growth_text <- "The rows represent four bacterial strains: Susceptible, 
 A-resistant, B-resistant, and double resistant. 
 Init is the starting population size of each strain. Mu is the growth
-rate with unlimited nutrients. K is the nutrient concentration that produces 
-half the maximal growth rate. Alpha is the amount of nutrients used per new
+rate with unlimited resources. K is the resource concentration that produces 
+half the maximal growth rate. Alpha is the amount of resources used per new
 bacterial cell."
 
 events_text <- "The two possible time-discontinuous features of the model
 are dosing with antibiotics, and bottlenecks where the population size is
-reduced proportionally and new nutrients are added. Supply determines the rate
+reduced proportionally and new resources are added. Supply determines the rate
 at which resources are continuously dded to the system. Drugs can be set to
 disappear when the next dose arrives, which is less realistic but sometimes
 convenient, or to persist through dosing."
@@ -59,12 +59,12 @@ growth_default <- matrix(
     c(
         "1e+9", 0, 0, 0, # init: initial populations
         0.88 * c(1, 0.9, 0.9, 0.81), # mu: growth rates
-        c(1e14, 1e14, 1e14, 1e14), # k: nutrients at half-maximal growth rate
+        c(1e14, 1e14, 1e14, 1e14), # k: resources at half-maximal growth rate
         1, 1, 1, 1 # alpha: resources used per unit growth
     ),
     nrow = 4, ncol = 4,
     dimnames = list(
-        c("S", "RA", "RB", "RAB"),
+        c("N_S", "N_A", "N_B", "N_AB"),
         c("Init", "Mu", "K", "Alpha")
     )
 )
@@ -73,17 +73,17 @@ pd_default <- matrix(
     c(
         1, 1, 1, 1, # Bcidal1
         0, 0, 0, 0, # Bstatic1
-        1, 28, 1, 28, # zeta1
-        1, 1, 1, 1, # kappa1
+        1, 28, 1, 28, # zeta_A
+        1, 1, 1, 1, # kappa_A
         1, 1, 1, 1, # Bcidal2
         0, 0, 0, 0, # Bstatic2
-        1, 1, 28, 28, # zeta2
-        1, 1, 1, 1, # kappa2
+        1, 1, 28, 28, # zeta_B
+        1, 1, 1, 1, # kappa_B
         0, 0, 0, 0 # delta
     ),
     nrow = 4, ncol = 9,
     dimnames = list(
-        c("S", "RA", "RB", "RAB"),
+        c("N_S", "N_A", "N_B", "N_AB"),
         c("Bcidal1", "Bstatic1", "Zeta1", "Kappa1", "Bcidal2", "Bstatic2", "Zeta2", "Kappa2", "Delta")
     )
 )
@@ -114,8 +114,8 @@ growth_content <- wellPanel(
 events_content <- wellPanel(
     p(events_text),
     numericInput("tau", "Bottleneck frequency (hours)", value = 10, step = 1),
-    numericInput("N0", "Bottleneck Nutrient pulse", value = "1e15", step = 1e9),
-    numericInput("supply", "Nutrient supply rate (hours^-1)", value = 0, step = 1e9),
+    numericInput("R0", "Bottleneck Resource pulse", value = "1e15", step = 1e9),
+    numericInput("supply", "Resource supply rate (hours^-1)", value = 0, step = 1e9),
     numericInput("D", "Bottleneck Dilution fraction", value = 1e-1, step = 0.1),
     numericInput("dose_gap", "Gap between doses (hours)", value = 10, step = 1),
     numericInput("dose_rep", "Drug cycling period (doses)", value = 1, step = 1),
@@ -176,23 +176,23 @@ server <- function(input, output, session) {
             time = input$time,
             tau = input$tau,
             dt = input$dt,
-            N0 = input$N0,
+            R0 = input$R0,
             D = input$D,
             HGT = input$HGT,
             m_A = input$drugs["A", "Mutation rate"],
             m_B = input$drugs["B", "Mutation rate"],
-            d1 = input$drugs["A", "Elimination rate"],
-            d2 = input$drugs["B", "Elimination rate"],
-            influx = input$drugs[, "Influx"],
+            d_A = input$drugs["A", "Elimination rate"],
+            d_B = input$drugs["B", "Elimination rate"],
+            influx = setNames(input$drugs[, "Influx"], c("C_A", "C_B")),
             init = input$growth[, c("Init")],
-            bcidal1 = input$pd[, "Bcidal1"],
-            bstatic1 = input$pd[, "Bstatic1"],
-            zeta1 = input$pd[, "Zeta1"],
-            kappa1 = input$pd[, "Kappa1"],
-            bcidal2 = input$pd[, "Bcidal2"],
-            bstatic2 = input$pd[, "Bstatic2"],
-            zeta2 = input$pd[, "Zeta2"],
-            kappa2 = input$pd[, "Kappa2"],
+            bcidal_A = input$pd[, "Bcidal1"],
+            bstatic_A = input$pd[, "Bstatic1"],
+            zeta_A = input$pd[, "Zeta1"],
+            kappa_A = input$pd[, "Kappa1"],
+            bcidal_B = input$pd[, "Bcidal2"],
+            bstatic_B = input$pd[, "Bstatic2"],
+            zeta_B = input$pd[, "Zeta2"],
+            kappa_B = input$pd[, "Kappa2"],
             delta = input$pd[, "Delta"],
             mu = input$growth[, "Mu"],
             k = input$growth[, "K"],

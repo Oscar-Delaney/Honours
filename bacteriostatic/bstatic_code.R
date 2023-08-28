@@ -2,7 +2,7 @@ source("stochastic.R")
 library(gridExtra)
 
 # Total population
-total_pop <- function(sol, dt = 0.1, strains = "S") {
+total_pop <- function(sol, dt = 0.1, strains = "N_S") {
   sol %>%
     filter(variable %in% strains) %>%
     group_by(rep) %>%
@@ -11,7 +11,7 @@ total_pop <- function(sol, dt = 0.1, strains = "S") {
 }
 
 # Final population
-final_pop <- function(sol, strains = c("S", "RA", "RB", "RAB")) {
+final_pop <- function(sol, strains = c("N_S", "N_A", "N_B", "N_AB")) {
   sol %>%
     filter(time == max(time) & variable %in% strains) %>%
     group_by(rep) %>%
@@ -20,7 +20,7 @@ final_pop <- function(sol, strains = c("S", "RA", "RB", "RAB")) {
 }
 
 # Time to reach target
-target_time <- function(sol, target = 1, strains = c("S", "RA", "RB", "RAB")) {
+target_time <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")) {
   sol %>%
     filter(variable %in% strains) %>%
     group_by(rep, time) %>%
@@ -31,34 +31,34 @@ target_time <- function(sol, target = 1, strains = c("S", "RA", "RB", "RAB")) {
 }
 
 # Whether target was hit
-target_hit <- function(sol, target = 1, strains = c("S", "RA", "RB", "RAB")) {
+target_hit <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")) {
   !is.na(target_time(sol, target, strains))
 }
 
-run_sims <- function(summary, zeta1 = c(S = 1, RA = 28, RB = 1, RAB = 28),
-zeta2 = c(S = 1, RA = 1, RB = 28, RAB = 28), delta = 0.25, rep = 1, dose_gap = 10,
-influx = 3 * c(A = 1, B = 1), m_A = 1e-9, m_B = 1e-9, d_ = 0, init_A = 0,
-init_B = 0, N0 = 1e8, data = FALSE) {
-    summary$bstatic1 <- 1 - summary$bcidal1
-    summary$bstatic2 <- 1 - summary$bcidal2
+run_sims <- function(summary, zeta_A = c(N_S = 1, N_A = 28, N_B = 1, N_AB = 28),
+zeta_B = c(N_S = 1, N_A = 1, N_B = 28, N_AB = 28), delta = 0.25, rep = 1, dose_gap = 10,
+influx = 3 * c(C_A = 1, C_B = 1), m_A = 1e-9, m_B = 1e-9, d_ = 0, init_A = 0,
+init_B = 0, R0 = 1e8, data = FALSE) {
+    summary$bstatic_A <- 1 - summary$bcidal_A
+    summary$bstatic_B <- 1 - summary$bcidal_B
     for (i in seq_len(nrow(summary))) {
         cycl <- ifelse(summary$therapy[i] == "Cycling", TRUE, FALSE)
         res <- switch(as.character(summary$resources[i]),
             "Abundant" = 3, "Intermediate" = 1.5, "Limiting" = 0)
         d <- d_ + ifelse(cycl, 0.1, 0.35)
         sol <- simulate(
-            init = c(S = ifelse(cycl, 5e8, 1e10), RA = init_A, RB = init_B, RAB = 0),
-            N0 = N0 * 10 ^ res,
+            init = c(N_S = ifelse(cycl, 5e8, 1e10), N_A = init_A, N_B = init_B, N_AB = 0),
+            R0 = R0 * 10 ^ res,
             k = 1e8,
             alpha = 1,
             supply = 1e8,
             mu = 1,
-            bcidal1 = summary$bcidal1[i],
-            bcidal2 = summary$bcidal2[i],
-            bstatic1 = summary$bstatic1[i],
-            bstatic2 = summary$bstatic2[i],
-            zeta1 = zeta1,
-            zeta2 = zeta2,
+            bcidal_A = summary$bcidal_A[i],
+            bcidal_B = summary$bcidal_B[i],
+            bstatic_A = summary$bstatic_A[i],
+            bstatic_B = summary$bstatic_B[i],
+            zeta_A = zeta_A,
+            zeta_B = zeta_B,
             delta = delta + res * 0.05,
             time = 60,
             tau = 1e4,
@@ -67,9 +67,9 @@ init_B = 0, N0 = 1e8, data = FALSE) {
             influx =  influx * (1 + !cycl),
             cycl = cycl,
             m_A = m_A, m_B = m_B,
-            d1 = d, d2 = d
+            d_A = d, d_B = d
         )[[1]]
-        wins <- 1 - target_hit(sol, target = 1e2, strains = c("RA", "RB"))
+        wins <- 1 - target_hit(sol, target = 1e2, strains = c("N_A", "N_B"))
         summary[i, c("wins", "ymin", "ymax")] <- c(mean(wins),
             binom.test(sum(wins), length(wins))$conf.int)
         print(i / nrow(summary))
@@ -82,9 +82,9 @@ init_B = 0, N0 = 1e8, data = FALSE) {
 }
 
 main_plot <- function(summary) {
-    labels <- expand.grid(bcidal1 = 0, bcidal2 = 1, therapy = unique(summary$therapy), resources = unique(summary$resources))
+    labels <- expand.grid(bcidal_A = 0, bcidal_B = 1, therapy = unique(summary$therapy), resources = unique(summary$resources))
     labels$label <- LETTERS[1:nrow(labels)]
-    p <- ggplot(summary, aes(x = bcidal1, y = bcidal2)) +
+    p <- ggplot(summary, aes(x = bcidal_A, y = bcidal_B)) +
         geom_tile(aes(fill = wins)) +
         labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
         facet_grid(rows = vars(resources), cols = vars(therapy)) +
@@ -109,7 +109,7 @@ main_plot <- function(summary) {
 }
 
 mono_plot <- function(summary, series, lower, upper, ylab, text){
-    p <- ggplot(summary, aes(x = bcidal1, y = get(series))) +
+    p <- ggplot(summary, aes(x = bcidal_A, y = get(series))) +
         geom_point(size = 3) +
         geom_errorbar(aes(ymin = get(lower), ymax = get(upper))) +
         theme_light() +
@@ -132,16 +132,43 @@ mono_plot <- function(summary, series, lower, upper, ylab, text){
     return(p)
 }
 
+theta_legend <- ggplot() +
+  annotate("segment", x = 0, xend = 1, y = 1, yend = 1, size = 1, arrow = arrow(ends = "both", angle = 90)) +
+  annotate("text", x = -0.01, y = 1, label = "0", vjust = -1, hjust = 0, size = 10) +
+  annotate("text", x = 0.99, y = 1, label = "1", vjust = -1, hjust = 0, size = 10) +
+  annotate("text", x = 0, y = 1, label = "bacteriostatic", vjust = 2, hjust = 0, size = 10) +
+  annotate("text", x = 0.8, y = 1, label = "bactericidal", vjust = 2, hjust = 0, size = 10) +
+  annotate("text", x = 0.5, y = 1, label = parse(text = "theta"), vjust = -1, hjust = 0, size = 10) +
+  theme_void()
+
+theta_legend
+
+legend_data <- data.frame(
+  x = c(0, 1, 0.1, 0.9, 0.5),
+  y = rep(1, 5),
+  label = c("0", "1", "bacteriostatic", "bactericidal", "theta")
+)
+
+legend_plot <- ggplot(legend_data) +
+  geom_segment(aes(x = 0, xend = 1, y = 1, yend = 1), size = 1, arrow = arrow(ends = "both", angle = 90)) +
+  geom_text(aes(x = x, y = y, label = label), size = 10, position = position_nudge(y = c(-0.01, -0.01, 0.02, 0.02, 0.02)), parse = TRUE) +
+  theme_void()
+
+legend_plot
+
+# 3. Combine the two using patchwork
+combined_plot <- main_plot + legend_plot + plot_layout(heights = c(5, 2))
+
 ### Figure 1
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = 0,
+summary <- expand.grid(bcidal_A = seq(0, 1, 0.05), bcidal_B = 0,
     therapy = "Cycling", resources = "Abundant")
 sol <- run_sims(summary[nrow(summary), ], rep = 1e1,
-    influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0, data = TRUE)
-dynamics <- log_plot(sol, use = c("S", "RA", "RB", "RAB", "N")) +
+    influx = c(C_A = 6, C_B = 0), dose_gap = 5, m_B = 0, data = TRUE)
+dynamics <- log_plot(sol, use = c("N_S", "N_A", "R")) +
     annotate("text", x = 0, y = Inf, label = "A", hjust = 0.5, vjust = 1,
         size = 15, fontface = "bold")
 mono_high_res <- run_sims(summary, rep = 1e3,
-    influx = c(A = 6, B = 0), dose_gap = 5, m_B = 0)
+    influx = c(C_A = 6, C_B = 0), dose_gap = 5, m_B = 0)
 mono <- mono_plot(mono_high_res, "wins", "ymin", "ymax", "P(extinct)", "B")
 
 # print as a pdf
@@ -152,7 +179,7 @@ dev.off()
 save(mono_high_res, file = "bacteriostatic/fig1.rdata")
 
 ### Figure 2
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
+summary <- expand.grid(bcidal_A = seq(0, 1, 0.05), bcidal_B = seq(0, 1, 0.05),
     therapy = c("Combination", "Cycling"), resources = c("Abundant", "Intermediate", "Limiting"))
 multi <- run_sims(summary, rep = 1e3)
 
@@ -163,18 +190,18 @@ dev.off()
 save(multi, file = "bacteriostatic/fig2.rdata")
 
 ### Figure S1
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
+summary <- expand.grid(bcidal_A = seq(0, 1, 0.05), bcidal_B = seq(0, 1, 0.05),
     therapy = c("Cycling"), resources = c("Abundant"))
-cs <- run_sims(summary, rep = 1e3, zeta1 = c(S = 1, RA = 28, RB = 0.5, RAB = 28),
-    zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = -0.05, influx = 7 * c(A = 1, B = 1))
+cs <- run_sims(summary, rep = 1e3, zeta_A = c(N_S = 1, N_A = 28, N_B = 0.5, N_AB = 28),
+    zeta_B = c(N_S = 1, N_A = 0.5, N_B = 28, N_AB = 28), delta = -0.05, influx = 7 * c(C_A = 1, C_B = 1))
 pdf("bacteriostatic/figS1.pdf", width = 10, height = 10)
 main_plot(cs)
 dev.off()
 
 save(cs, file = "bacteriostatic/figS1.rdata")
-
+load("bacteriostatic/figS1.rdata")
 ### Figure S2
-quick_degrade <- run_sims(summary, rep = 1e3, influx = 30 * c(A = 1, B = 1), d_ = 0.4, delta = 0.3)
+quick_degrade <- run_sims(summary, rep = 1e3, influx = 30 * c(C_A = 1, C_B = 1), d_ = 0.4, delta = 0.3)
 
 pdf("bacteriostatic/figS2.pdf", width = 10, height = 10)
 main_plot(quick_degrade)
@@ -193,7 +220,7 @@ save(pre_existing, file = "bacteriostatic/figS3.rdata")
 
 # Function to create a single plot given a subset of the data and title labels
 create_plot <- function(data_subset, label) {
-  p <- ggplot(data_subset, aes(x = bcidal1, y = bcidal2)) +
+  p <- ggplot(data_subset, aes(x = bcidal_A, y = bcidal_B)) +
     geom_tile(aes(fill = wins)) +
     scale_fill_gradient(low = "white", high = "blue") +
     labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
