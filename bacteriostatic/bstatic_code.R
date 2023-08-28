@@ -87,7 +87,6 @@ main_plot <- function(summary) {
     p <- ggplot(summary, aes(x = bcidal_A, y = bcidal_B)) +
         geom_tile(aes(fill = wins)) +
         labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
-        facet_grid(rows = vars(resources), cols = vars(therapy)) +
         theme_minimal() +
         theme(
             axis.title = element_text(size = 35, face = "bold"),
@@ -100,6 +99,7 @@ main_plot <- function(summary) {
         )
     if (nrow(unique(summary[, c("therapy", "resources")])) > 1) {
         p <- p +
+            facet_grid(rows = vars(resources), cols = vars(therapy)) +
             geom_text(data = labels, aes(label = label), vjust = 1, hjust = 0, size = 15, fontface = "bold") +
             scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1))
     } else {
@@ -199,7 +199,7 @@ main_plot(cs)
 dev.off()
 
 save(cs, file = "bacteriostatic/figS1.rdata")
-load("bacteriostatic/figS1.rdata")
+
 ### Figure S2
 quick_degrade <- run_sims(summary, rep = 1e3, influx = 30 * c(C_A = 1, C_B = 1), d_ = 0.4, delta = 0.3)
 
