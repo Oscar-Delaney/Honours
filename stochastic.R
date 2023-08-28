@@ -271,20 +271,6 @@ log_plot <- function(solutions, type = "all", use = c("N_S", "N_A", "N_B", "N_AB
   peak <- max(solutions[solutions$variable %in% use, "value"], na.rm = TRUE)
   # Create the plot
   plot <- ggplot() +
-    # Add the gradient backgrounds
-    geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.2,
-         ymax = peak * 10^0.4, fill = C_A), color = NA, alpha = 1) +
-    scale_fill_gradient(low = "white", high = colors[2],
-      limits = c(0, 1), name = expression(C[A]), labels = NULL) +
-    new_scale_fill() +
-    geom_rect(data = background_df,
-      aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.4,
-        ymax = peak * 10^0.6, fill = C_B), color = NA, alpha = 1) +
-    scale_fill_gradient(low = "white", high = colors[3],
-      limits = c(0, 1), name = expression(C[B]), labels = NULL) +
-    # Add the lines
-    new_scale_fill() +
     geom_line(data = filtered, aes(x = time, y = central, color = variable,
       linetype = factor(rep)), linewidth = 1 + 0.5 / max(filtered$rep)) +
     scale_color_manual(
@@ -292,14 +278,12 @@ log_plot <- function(solutions, type = "all", use = c("N_S", "N_A", "N_B", "N_AB
       breaks = c("N_S", "N_A", "N_B", "N_AB", "R"),
       labels = expression(N[S], N[A], N[B], N[AB], R)
     ) +
-    # scale_color_manual(values = colors) +
     scale_linetype_manual(values = rep("solid", max(filtered$rep))) +
     guides(linetype = "none") +
     scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
       breaks = 10^seq(0, 20),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(
-      # title = "Bacterial growth over time",
       x = "Time (hours)",
       y = "Population size",
       color = "Strain",
@@ -308,7 +292,6 @@ log_plot <- function(solutions, type = "all", use = c("N_S", "N_A", "N_B", "N_AB
     theme_light() +
     theme(
       legend.position = "bottom",
-      # plot.title = element_text(size = 35, face = "bold", hjust = 0.5),
       axis.title = element_text(size = 35),
       axis.text = element_text(size = 25),
       legend.title = element_text(size = 20),
@@ -320,6 +303,26 @@ log_plot <- function(solutions, type = "all", use = c("N_S", "N_A", "N_B", "N_AB
       geom_ribbon(data = filtered, alpha = 0.3,
         aes(x = time, ymin = lower, ymax = upper, fill = variable)) +
       scale_fill_manual(values = colors)
+  }
+  # If drug A is present add the drug A rectangles
+  if (max(background_df$C_A) > 0) {
+    plot <- plot +
+      new_scale_fill() +
+      geom_rect(data = background_df,
+        aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.6,
+          ymax = peak * 10^0.8, fill = C_A), color = NA, alpha = 1) +
+      scale_fill_gradient(low = "white", high = colors[2],
+        limits = c(0, 1), name = expression(C[A]), labels = NULL)
+  }
+  # If drug B is present add the drug B rectangles
+  if (max(background_df$C_B) > 0) {
+    plot <- plot +
+      new_scale_fill() +
+      geom_rect(data = background_df,
+        aes(xmin = xmin, xmax = xmax, ymin = peak * 10^0.8,
+          ymax = peak * 10^1, fill = C_B), color = NA, alpha = 1) +
+      scale_fill_gradient(low = "white", high = colors[3],
+        limits = c(0, 1), name = expression(C[B]), labels = NULL)
   }
   # Display the plot
   return(plot)
