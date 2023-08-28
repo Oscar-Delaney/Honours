@@ -163,29 +163,51 @@ dev.off()
 save(multi, file = "bacteriostatic/fig2.rdata")
 
 ### Figure S1
-summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
-    therapy = c("Cycling"), resources = c("Abundant"))
-cs <- run_sims(summary, rep = 1e3, zeta1 = c(S = 1, RA = 28, RB = 0.5, RAB = 28),
-    zeta2 = c(S = 1, RA = 0.5, RB = 28, RAB = 28), delta = -0.05, influx = 7 * c(A = 1, B = 1))
-pdf("bacteriostatic/figS1.pdf", width = 10, height = 10)
+# summary <- expand.grid(bcidal1 = seq(0, 1, 0.05), bcidal2 = seq(0, 1, 0.05),
+#     therapy = c("Cycling"), resources = c("Abundant"))
+summary <- expand.grid(bcidal1 = seq(0, 0.1, 0.025), therapy = "Combination", resources = "Limiting")
+summary$bcidal2 <- summary$bcidal1
+
+cs <- run_sims(summary, rep = 1e3)
+
+log_plot(cs, use = c("S", "RA", "RB", "RAB", "N"))
+mono_plot(cs, "wins", "ymin", "ymax", "P(extinct)", "")
+
+
+pdf("bacteriostatic/figS1.pdf", width = 20, height = 25)
 main_plot(cs)
 dev.off()
 
 save(cs, file = "bacteriostatic/figS1.rdata")
 
 ### Figure S2
-quick_degrade <- run_sims(summary, rep = 1e3, influx = 30 * c(A = 1, B = 1), d_ = 0.4, delta = 0.3)
+summary <- expand.grid(bcidal1 = seq(0, 1, 0.1), therapy = "Combination", resources = "Limiting")
+summary$bcidal2 <- summary$bcidal1
+quick_degrade <- run_sims(summary[10, ], data = TRUE, rep = 1e2, influx = 10 * c(A = 1, B = 1), d_ = 0.4, delta = 0.3)
+log_plot(quick_degrade, use = c("S", "RA", "RB", "RAB", "N"))
+mono_plot(quick_degrade, "wins", "ymin", "ymax", "P(extinct)", "")
 
-pdf("bacteriostatic/figS2.pdf", width = 10, height = 10)
+
+quick_degrade_comb <- run_sims(summary[summary$therapy == "Combination", ], rep = 1e3, influx = 10 * c(A = 1, B = 1), d_ = 0.4, delta = 0.3)
+quick_degrade_cycl <- run_sims(summary[summary$therapy == "Cycling", ], rep = 1e3, influx = 30 * c(A = 1, B = 1), d_ = 0.4, delta = 0.3)
+quick_degrade <- rbind(quick_degrade_comb, quick_degrade_cycl)
+
+pdf("bacteriostatic/figS2.pdf", width = 20, height = 25)
 main_plot(quick_degrade)
 dev.off()
 
 save(quick_degrade, file = "bacteriostatic/figS2.rdata")
 
 ### Figure S3
-pre_existing <- run_sims(summary, rep = 1e3, m_A = 0, m_B = 0, init_B = 5, delta = 0.1)
+summary <- expand.grid(bcidal2 = seq(0, 1, 0.1), therapy = "Combination", resources = "Limiting")
+summary$bcidal1 <- 0
 
-pdf("bacteriostatic/figS3.pdf", width = 10, height = 10)
+pre_existing <- run_sims(summary[4, ], data = TRUE, rep = 1e2, m_A = 0, m_B = 0, init_B = 5, delta = 0.1)
+
+log_plot(pre_existing, use = c("S", "RA", "RB", "RAB", "N"))
+mono_plot(pre_existing, "wins", "ymin", "ymax", "P(extinct)", "")
+
+pdf("bacteriostatic/figS3.pdf", width = 20, height = 25)
 main_plot(pre_existing)
 dev.off()
 
