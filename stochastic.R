@@ -205,12 +205,14 @@ simulate <- function(
   N_add = 0 # additional resource added at each bottleneck, above base media
   ) {
   # Define the parameters of the model
+  tau <- min(tau, time) # ensure tau is not greater than time
   config <- as.list(environment())
   config$influx <- influx * c(zeta_A["N_S"], zeta_B["N_S"]) # normalise drug units
   config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
   # return(config)
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
+  set.seed(seed) # set the seed for reproducibility
   solutions <- bind_rows(future_lapply(1:rep, function(x) {
     single_run(config, x)},
     future.seed = TRUE))

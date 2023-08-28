@@ -47,6 +47,7 @@ init_B = 0, R0 = 1e8, data = FALSE) {
             "Abundant" = 3, "Intermediate" = 1.5, "Limiting" = 0)
         d <- d_ + ifelse(cycl, 0.1, 0.35)
         sol <- simulate(
+            seed = i,
             init = c(N_S = ifelse(cycl, 5e8, 1e10), N_A = init_A, N_B = init_B, N_AB = 0),
             R0 = R0 * 10 ^ res,
             k = 1e8,
@@ -131,33 +132,6 @@ mono_plot <- function(summary, series, lower, upper, ylab, text){
     }
     return(p)
 }
-
-theta_legend <- ggplot() +
-  annotate("segment", x = 0, xend = 1, y = 1, yend = 1, size = 1, arrow = arrow(ends = "both", angle = 90)) +
-  annotate("text", x = -0.01, y = 1, label = "0", vjust = -1, hjust = 0, size = 10) +
-  annotate("text", x = 0.99, y = 1, label = "1", vjust = -1, hjust = 0, size = 10) +
-  annotate("text", x = 0, y = 1, label = "bacteriostatic", vjust = 2, hjust = 0, size = 10) +
-  annotate("text", x = 0.8, y = 1, label = "bactericidal", vjust = 2, hjust = 0, size = 10) +
-  annotate("text", x = 0.5, y = 1, label = parse(text = "theta"), vjust = -1, hjust = 0, size = 10) +
-  theme_void()
-
-theta_legend
-
-legend_data <- data.frame(
-  x = c(0, 1, 0.1, 0.9, 0.5),
-  y = rep(1, 5),
-  label = c("0", "1", "bacteriostatic", "bactericidal", "theta")
-)
-
-legend_plot <- ggplot(legend_data) +
-  geom_segment(aes(x = 0, xend = 1, y = 1, yend = 1), size = 1, arrow = arrow(ends = "both", angle = 90)) +
-  geom_text(aes(x = x, y = y, label = label), size = 10, position = position_nudge(y = c(-0.01, -0.01, 0.02, 0.02, 0.02)), parse = TRUE) +
-  theme_void()
-
-legend_plot
-
-# 3. Combine the two using patchwork
-combined_plot <- main_plot + legend_plot + plot_layout(heights = c(5, 2))
 
 ### Figure 1
 summary <- expand.grid(bcidal_A = seq(0, 1, 0.05), bcidal_B = 0,
