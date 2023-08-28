@@ -121,18 +121,18 @@ single_run <- function(config, x) {
     # Initialise the state variables
     state <- c(init, R = R0, influx * pattern)
     time_grid <- seq(0, time, by = dt) # a common time grid for all runs
-    event_times <- sort(unique(round(c(time, seq(0, time, tau),
+    events <- sort(unique(round(c(time, seq(0, time, tau),
       seq(0, time, dose_gap)), 10)))
-    for (t in event_times[-length(event_times)]) {
+    for (t in events[-length(events)]) {
       # Determine the time until the next bottleneck or dose
-      end <- min(event_times[event_times > t] - t)
+      end <- min(events[events > t] - t)
       # Run the model between events, deterministically or stochastically
       if (deterministic) {
         times <- c(time_grid[time_grid <= end], end) # ensures length(times) > 1
         new <- ode(state, times, ode_rates, config)
       } else {
         # set the seed for reproducibility
-        if (is.numeric(seed)) set.seed(round(seed + (x * time + t) / tau))
+        if (is.numeric(seed)) set.seed(seed + x * length(events) + which(events == t))
         new <- ssa.adaptivetau(
           state, transitions, rates, config, tf = end,
           tl.params = list(maxtau = max_step),
