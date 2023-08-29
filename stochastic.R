@@ -205,7 +205,6 @@ simulate <- function(
   N_add = 0 # additional resource added at each bottleneck, above base media
   ) {
   # Define the parameters of the model
-  tau <- min(tau, time) # ensure tau is not greater than time
   config <- as.list(environment())
   config$influx <- influx * c(zeta_A["N_S"], zeta_B["N_S"]) # normalise drug units
   config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
@@ -330,7 +329,7 @@ log_plot <- function(solutions, type = "all", use = c("N_S", "N_A", "N_B", "N_AB
   return(plot)
 }
 
-system.time(log_plot(simulate()[[1]]))
+# system.time(log_plot(simulate()[[1]]))
 # simulate(deterministic = TRUE)[[1]]$value[7001:7007]
 # [1] 3.051810e+14 2.515378e+11 1.181122e+12 1.717214e+09 6.784406e+12
 # [6] 1.333550e-02 9.662624e-01
