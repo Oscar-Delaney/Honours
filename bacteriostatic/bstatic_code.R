@@ -1,5 +1,7 @@
 source("stochastic.R")
 library(gridExtra)
+library(patchwork)
+library(cowplot)
 
 # Whether target was hit
 target_hit <- function(sol, target = 1e2, strains = c("N_A", "N_B")) {
@@ -61,15 +63,35 @@ init_B = 0, R0 = 1e8, data = FALSE) {
     }
 }
 
+bottom_plot <- ggplot() +
+  annotate("segment", x = 0, xend = 0.25, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
+  annotate("segment", x = 1, xend = 0.75, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
+  annotate("text", x = 0.15, y = 0, label = "bacteriostatic", vjust = 2, size = 6) +
+  annotate("text", x = 0.85, y = 0, label = "bactericidal", vjust = 2, size = 6) +
+  annotate("text", x = 0.5, y = 0, label = expression(theta["A"]), size = 10) +
+  theme_void()
+
+side_plot <- ggplot() +
+  annotate("segment", x = 0, xend = 0, y = 0, yend = 0.25, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
+  annotate("segment", x = 0, xend = 0, y = 1, yend = 0.75, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
+  annotate("text", x = 0, y = 0.15, label = "bacteriostatic", angle = 90, vjust = -1, size = 6) +
+  annotate("text", x = 0, y = 0.85, label = "bactericidal", angle = 90, vjust = -1, size = 6) +
+  annotate("text", x = 0, y = 0.5, label = expression(theta["B"]), angle = 90, size = 10) +
+  theme_void()
+
+blank_plot <- ggplot() + theme_void()
+
+# Create a 2D tile plot of the results
 main_plot <- function(summary) {
     labels <- expand.grid(bcidal_A = 0, bcidal_B = 1, therapy = unique(summary$therapy), resources = unique(summary$resources))
     labels$label <- LETTERS[1:nrow(labels)]
+
     p <- ggplot(summary, aes(x = bcidal_A, y = bcidal_B)) +
         geom_tile(aes(fill = wins)) +
-        labs(x = expression(theta["A"]), y = expression(theta["B"]), fill = "P(extinct)") +
+        labs(fill = "P(extinct)") +
         theme_minimal() +
         theme(
-            axis.title = element_text(size = 35, face = "bold"),
+            axis.title = element_blank(),
             axis.text = element_text(size = 25),
             legend.title = element_text(size = 25),
             legend.text = element_text(size = 20),
@@ -77,15 +99,34 @@ main_plot <- function(summary) {
             legend.key.size = unit(2, "cm"),
             strip.text = element_text(size = 25, face = "bold")
         )
+
     if (nrow(unique(summary[, c("therapy", "resources")])) > 1) {
+        all_side_plots <- side_plot / side_plot / side_plot / blank_plot +
+            plot_layout(heights = c(1, 1, 1, 0.22))
+
+        all_bottom_plots <- bottom_plot + bottom_plot
+
         p <- p +
             facet_grid(rows = vars(resources), cols = vars(therapy)) +
             geom_text(data = labels, aes(label = label), vjust = 1, hjust = 0, size = 15, fontface = "bold") +
             scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1))
+
     } else {
+        all_side_plots <- side_plot / blank_plot +
+            plot_layout(heights = c(1, 0.1))
+
+        all_bottom_plots <- bottom_plot
+
         p <- p + scale_fill_gradient(low = "white", high = "blue")
     }
-    return(p)
+    
+    data_plot <- p + theme(legend.position = "none")
+
+    final_plot <- ((all_side_plots | ((data_plot / all_bottom_plots) +
+    plot_layout(heights = c(20, 1)))) + plot_layout(widths = c(1, 20))) /
+              get_legend(p) + plot_layout(heights = c(15, 1))
+
+    return(final_plot)
 }
 
 ### Figure 1
@@ -104,7 +145,7 @@ mono <- ggplot(mono_high_res, aes(x = bcidal_A, y = wins)) +
     scale_y_continuous(limits = c(0, 1)) +
     theme_light() +
     labs(
-        x = expression(theta["A"]),
+        x = NULL,
         y = "P(extinct)"
     ) +
     theme(
@@ -114,10 +155,12 @@ mono <- ggplot(mono_high_res, aes(x = bcidal_A, y = wins)) +
     ) +
     annotate("text", x = 0, y = Inf, label = "B", hjust = 1, vjust = 1.5,
         size = 15, fontface = "bold")
+right <- mono / bottom_plot + plot_layout(heights = c(10, 1))
+left <- dynamics / blank_plot + plot_layout(heights = c(1, 0))
 
 # print as a pdf
 pdf("bacteriostatic/fig1.pdf", width = 20, height = 10)
-grid.arrange(dynamics, mono, ncol = 2)
+left | right
 dev.off()
 
 save(mono_high_res, file = "bacteriostatic/fig1.rdata")
