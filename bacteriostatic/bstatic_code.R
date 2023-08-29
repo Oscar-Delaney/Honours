@@ -66,16 +66,16 @@ init_B = 0, R0 = 1e8, data = FALSE) {
 
 # Create some helper plots for annotation
 bottom_plot <- ggplot() +
-  annotate("segment", x = 0, xend = 0.25, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
-  annotate("segment", x = 1, xend = 0.75, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
+  annotate("segment", x = 0, xend = 0.25, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), linewidth = 0.5) +
+  annotate("segment", x = 1, xend = 0.75, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), linewidth = 0.5) +
   annotate("text", x = 0.15, y = 0, label = "bacteriostatic", vjust = 2, size = 6) +
   annotate("text", x = 0.85, y = 0, label = "bactericidal", vjust = 2, size = 6) +
   annotate("text", x = 0.5, y = 0, label = expression(theta["A"]), size = 10) +
   theme_void()
 
 side_plot <- ggplot() +
-  annotate("segment", x = 0, xend = 0, y = 0, yend = 0.25, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
-  annotate("segment", x = 0, xend = 0, y = 1, yend = 0.75, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
+  annotate("segment", x = 0, xend = 0, y = 0, yend = 0.25, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), linewidth = 0.5) +
+  annotate("segment", x = 0, xend = 0, y = 1, yend = 0.75, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), linewidth = 0.5) +
   annotate("text", x = 0, y = 0.15, label = "bacteriostatic", angle = 90, vjust = -1, size = 6) +
   annotate("text", x = 0, y = 0.85, label = "bactericidal", angle = 90, vjust = -1, size = 6) +
   annotate("text", x = 0, y = 0.5, label = expression(theta["B"]), angle = 90, size = 10) +
