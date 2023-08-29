@@ -25,7 +25,7 @@ init_B = 0, R0 = 1e8, data = FALSE) {
             "Abundant" = 3, "Intermediate" = 1.5, "Limiting" = 0)
         d <- d_ + ifelse(cycl, 0.1, 0.35)
         sol <- simulate(
-            seed = i,
+            seed = i * 1e6,
             init = c(N_S = ifelse(cycl, 5e8, 1e10),
               N_A = init_A, N_B = init_B, N_AB = 0),
             R0 = R0 * 10 ^ res,
