@@ -3,7 +3,7 @@ library(gridExtra)
 library(patchwork)
 library(cowplot)
 
-# Whether target was hit
+# Check whether the target was hit
 target_hit <- function(sol, target = 1e2, strains = c("N_A", "N_B")) {
     target_times <- sol %>%
       filter(variable %in% strains) %>%
@@ -15,6 +15,7 @@ target_hit <- function(sol, target = 1e2, strains = c("N_A", "N_B")) {
     !is.na(target_times)
 }
 
+# Run many simulations with prespecified parameters
 run_sims <- function(summary, zeta_A = c(N_S = 1, N_A = 28, N_B = 1, N_AB = 28),
 zeta_B = c(N_S = 1, N_A = 1, N_B = 28, N_AB = 28), delta = 0.25, rep = 1, dose_gap = 10,
 influx = 3 * c(C_A = 1, C_B = 1), m_A = 1e-9, m_B = 1e-9, d_ = 0, init_A = 0,
@@ -63,6 +64,7 @@ init_B = 0, R0 = 1e8, data = FALSE) {
     }
 }
 
+# Create some helper plots for annotation
 bottom_plot <- ggplot() +
   annotate("segment", x = 0, xend = 0.25, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
   annotate("segment", x = 1, xend = 0.75, y = 0, yend = 0, arrow = arrow(type = "closed", ends = "first", length = unit(0.2, "inches")), size = 0.5) +
@@ -96,7 +98,8 @@ main_plot <- function(summary) {
             legend.title = element_text(size = 25),
             legend.text = element_text(size = 20),
             legend.position = "bottom",
-            legend.key.size = unit(2, "cm"),
+            legend.key.width = unit(2, "cm"),
+            legend.spacing.x = unit(1, "cm"),
             strip.text = element_text(size = 25, face = "bold")
         )
 
@@ -111,20 +114,23 @@ main_plot <- function(summary) {
             geom_text(data = labels, aes(label = label), vjust = 1, hjust = 0, size = 15, fontface = "bold") +
             scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1))
 
+        ratio <- 20
     } else {
         all_side_plots <- side_plot / blank_plot +
-            plot_layout(heights = c(1, 0.1))
+            plot_layout(heights = c(1, 0.15))
 
         all_bottom_plots <- bottom_plot
 
         p <- p + scale_fill_gradient(low = "white", high = "blue")
+
+        ratio <- 10
     }
     
     data_plot <- p + theme(legend.position = "none")
 
     final_plot <- ((all_side_plots | ((data_plot / all_bottom_plots) +
-    plot_layout(heights = c(20, 1)))) + plot_layout(widths = c(1, 20))) /
-              get_legend(p) + plot_layout(heights = c(15, 1))
+    plot_layout(heights = c(ratio, 1)))) + plot_layout(widths = c(1, ratio))) /
+              get_legend(p) + plot_layout(heights = c(ratio, 1))
 
     return(final_plot)
 }
@@ -177,10 +183,10 @@ dev.off()
 save(multi, file = "bacteriostatic/fig2.rdata")
 
 ### Figure S1
-summary <- expand.grid(bcidal_A = seq(0, 1, 0.05), bcidal_B = seq(0, 1, 0.05),
-    therapy = c("Cycling"), resources = c("Abundant"))
+summary <- subset(summary, therapy == "Cycling" & resources == "Abundant")
 cs <- run_sims(summary, rep = 1e3, zeta_A = c(N_S = 1, N_A = 28, N_B = 0.5, N_AB = 28),
     zeta_B = c(N_S = 1, N_A = 0.5, N_B = 28, N_AB = 28), delta = -0.05, influx = 7 * c(C_A = 1, C_B = 1))
+
 pdf("bacteriostatic/figS1.pdf", width = 10, height = 10)
 main_plot(cs)
 dev.off()
