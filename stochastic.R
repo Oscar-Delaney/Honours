@@ -115,6 +115,8 @@ ode_rates <- function(t, state, config) {
 
 # a function to implement one run of the model
 single_run <- function(config, x) {
+  # Optionally randomise the pattern
+  if (config$first == "rand") config$pattern <- sample(c(0, 1))
   with(config, {
     # Define the transitions of the model
     transitions <- make_transitions()
@@ -202,12 +204,13 @@ simulate <- function(
   k = 1e14 * c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1), # [R] at half-max growth rate
   alpha = c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1), # resources used per replication
   supply = 0, # resource supply rate
-  N_add = 0 # additional resource added at each bottleneck, above base media
+  N_add = 0, # additional resource added at each bottleneck, above base media
+  first = "A" # pattern of initial drug application
   ) {
-  # Define the parameters of the model
+  # Initialise the drug application pattern
+  pattern <- if (cycl) c(first == "A", first == "B") else c(1, 1)
   config <- as.list(environment())
   config$influx <- influx * c(zeta_A["N_S"], zeta_B["N_S"]) # normalise drug units
-  config$pattern <- if (cycl) c(1, 0) else c(1, 1) # pattern of drug application
   # return(config)
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
