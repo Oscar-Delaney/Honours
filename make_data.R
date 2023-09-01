@@ -34,53 +34,56 @@ target_hit <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")
   !is.na(target_time(sol, target, strains))
 }
 
+log_plot(simulate(first = "A", rep = 10, deterministic = F)[[1]])
 # Create a grid of parameter combinations
 # summary <- expand.grid(dose_rep = seq(1, 12, 1), kappa = seq(0.5, 3, 0.5))
-summary <- expand.grid(cA = seq(0.5, 1, 0.05), m_A = c(2 ^ - seq(1, 6, 1), 0))
+summary <- expand.grid(cA = seq(0.5, 1, 0.05), m_A = c(2 ^ - seq(1, 6, 1), 0), first = c("A"))
 summary$m_A_discrete <- as.factor(round(summary$m_A, 3))
 data <- list()
 for (i in seq_len(nrow(summary))) {
     data[[i]] <- simulate(
-        init = c(N_S = 1e10, N_A = 0, N_B = 0, N_AB = 0),
-        R0 = 1e10,
+        init = c(N_S = 1e9, N_A = 0, N_B = 0, N_AB = 0),
+        R0 = 1e9,
         k = 0,
         alpha = 0,
         supply = 1e8,
         mu = 1,
+        first = summary$first[i],
         bcidal_A = 2,
         bcidal_B = 2,
         delta = 0,
-        time = 40,
+        time = 120,
         tau = 1e4,
         max_step = 1e-1,
-        rep = 2e2,
+        rep = 1e3,
         HGT = 0,
         dose_rep = 1,
-        dose_gap = 1e4,
-        influx = 1.5 * c(C_A = summary$cA[i], C_B = 1 - summary$cA[i]),
-        cycl = FALSE,
+        dose_gap = 8,
+        influx = 5 * c(C_A = summary$cA[i], C_B = 1 - summary$cA[i]),
+        cycl = TRUE,
         m_A = 1e-9 * summary$m_A[i], m_B = 1e-9 * (1 - summary$m_A[i]),
-        d_A = 0, d_B = 0,
+        d_A = 0.2, d_B = 0.2,
         deterministic = FALSE
     )
-    wins <- !target_hit(data[[i]][[1]], target = 1e2, strains = c("N_A", "N_B"))
+    wins <- !target_hit(data[[i]][[1]], target = 1e3, strains = c("N_A", "N_B"))
     summary$wins[i] <- mean(wins)
     ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
     summary$ymin[i] <- ci[1]
     summary$ymax[i] <- ci[2]
     print(i / nrow(summary))
 }
-log_plot(data[[11]][[1]][data[[1]][[1]]$rep <= 10, ])
-
+log_plot(data[[44]][[1]][data[[1]][[1]]$rep <= 50, ], use = c("N_S", "N_A", "N_B", "N_AB", "R"))
+summary[i, ]
 # plot with one independent variable and one dependent variable
-ggplot(summary, aes(x = cA, y = wins, color = m_A_discrete)) +
+ggplot(summary[summary$m_A <= 0.5, ], aes(x = cA, y = wins, color = m_A_discrete)) +
     geom_point(size = 3) +
     geom_errorbar(aes(ymin = ymin, ymax = ymax)) +
     theme_light() +
-    scale_y_continuous(limits = c(0, 1)) +
+    # scale_y_continuous(limits = c(0, 1)) +
     labs(
         x = "proportion of dose that is A",
-        y = "P(extinct))",
+        y = "P(extinct)",
+        # shape = "m_A",
         color = "m_A"
     ) +
     theme(
@@ -113,7 +116,7 @@ ggplot(summary, aes(x = log2(m_A), y = cA)) +
         legend.spacing.x = unit(1, "cm"),
         strip.text = element_text(size = 25, face = "bold")
     )
-    
+
 summary
 sol <- data[[1]][[1]][data[[1]][[1]]$rep == 43, ]
 sol2 <- sol[sol$variable =="N_S" & sol$time <= 15,]
@@ -171,6 +174,6 @@ ggplot(summary, aes(x = D, y = HGT, color = wins)) +
     )
 
 # # Save the simulation results to a file
-save(summary, file = "C:/Users/s4528540/Downloads/results/17_07_synergy_2on1.RData")
+save(summary, file = "C:/Users/s4528540/Downloads/results/31_08_mut_vary_cycl.RData")
 # read the data file we just wrote back as data
 load("C:/Users/s4528540/Downloads/results/17_07_synergy_reciprocal.RData")
