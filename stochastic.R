@@ -205,13 +205,14 @@ simulate <- function(
   alpha = c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1), # resources used per replication
   supply = 0, # resource supply rate
   N_add = 0, # additional resource added at each bottleneck, above base media
-  first = "A" # pattern of initial drug application
+  first = "A", # pattern of initial drug application
+  config_only = FALSE # return the config list only
   ) {
   # Initialise the drug application pattern
   pattern <- if (cycl) c(first == "A", first == "B") else c(1, 1)
   config <- as.list(environment())
   config$influx <- influx * c(zeta_A["N_S"], zeta_B["N_S"]) # normalise drug units
-  # return(config)
+  if (config_only) return(config)
   # Run the simulation rep number of times, using parallelisation if possible
   plan(multisession) # compatible with both unix and Windows
   set.seed(seed) # set the seed for reproducibility
