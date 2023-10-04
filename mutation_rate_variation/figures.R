@@ -40,7 +40,7 @@ theory_extinct <- function(phi, N, m) {
 }
 
 run_sims <- function(summary, config_only = FALSE, rep = 1e2, zeta = 1e9,
-c = 5, kappa = 1) {
+c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
     for (i in seq_len(nrow(summary))) {
         m_A <- 1 / (1 + 1 / summary$m_ratio[i])
         data <- simulate(
@@ -49,14 +49,14 @@ c = 5, kappa = 1) {
             k = 0,
             alpha = 0,
             supply = 1e8,
-            mu = 1,
+            mu = c(1, 1 - cost, 1 - cost, 1 - 2 * cost),
             bcidal_A = summary$cidal_A[i],
             bcidal_B = summary$cidal_B[i],
             bstatic_A = 1 - summary$cidal_A[i],
             bstatic_B = 1 - summary$cidal_B[i],
             zeta_A = c(N_S = 1, N_A = zeta, N_B = 1, N_AB = zeta),
             zeta_B = c(N_S = 1, N_A = 1, N_B = zeta, N_AB = zeta),
-            delta = 1 - 1 / (1 + c ^ -1),
+            delta = 1 - 1 / (1 + c ^ -kappa) - net,
             time = 50,
             tau = 1e4,
             max_step = 1e-1,
@@ -64,11 +64,11 @@ c = 5, kappa = 1) {
             rep = rep,
             HGT = 0,
             dose_rep = 1,
-            dose_gap = 1e4,
+            dose_gap = gap,
             influx = c * c(C_A = summary$cA[i], C_B = 1 - summary$cA[i]),
             cycl = FALSE,
             m_A = m * m_A, m_B = m * (1 - m_A),
-            d_A = 0, d_B = 0,
+            d_A = d, d_B = d,
             deterministic = FALSE,
             config_only = config_only
         )
@@ -106,17 +106,17 @@ summary_plot <- function(summary, var) {
         slice_head(n = 1) %>%
         ungroup()
 
-    ggplot(summary, aes(x = log2(m_ratio), y = cA)) +
+    ggplot(summary, aes(x = log2(m_ratio), y = log2(cA / (1 - cA)))) +
         geom_tile(aes(fill = (get(var)))) +
-        geom_line(aes(x = log2(m_ratio), y = approx), color = "green", linewidth = 3) +
-        geom_point(data = max_df, aes(y = cA, x = log2(m_ratio)), color = "yellow", size = 3) +
+        geom_line(aes(x = log2(m_ratio), y = log2(approx / (1 - approx))), color = "green", linewidth = 3) +
+        geom_point(data = max_df, aes(y = log2(cA / (1 - cA)), x = log2(m_ratio)), color = "yellow", size = 3) +
         facet_grid(cidal_B ~ cidal_A) +
         geom_text(data = labels, aes(label = label), size = 15, fontface = "bold") +
         labs(fill = "P(extinct)") +
         theme_minimal() +
         labs(
             x = "Log2 odds of A-resistance:B-resistance",
-            y = "Proportion of dose that is drug A"
+            y = "Log2 odds of A-molecule:B-molecule"
         ) +
         scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1)) +
         theme(
@@ -136,31 +136,65 @@ init_S <- 1e9
 m <- 1e-9
 
 ### Basic
-summary <- expand.grid(cA = seq(0, 1, 0.03), m_ratio = 2 ^ seq(-10, 10, 0.5), cidal_A = c(0, 1), cidal_B = c(0, 1))
+summary <- expand.grid(cA = 1 / (1 + 2 ^ seq(-5, 5, 0.2)), m_ratio = 2 ^ seq(-10, 10, 0.5), cidal_A = c(0, 1), cidal_B = c(0, 1))
 basic <- run_sims(summary, config_only = TRUE)
 
-pdf("mutation_rate_variation/basic.pdf", width = 20, height = 20)
+pdf("mutation_rate_variation/basic2.pdf", width = 20, height = 20)
 summary_plot(basic, "extinct")
 dev.off()
 
 ### Incomplete resistance
-in_res <- run_sims(summary, zeta = 25, c = 5, config_only = TRUE)
+in_res <- run_sims(summary, zeta = 25, config_only = TRUE)
 
 pdf("mutation_rate_variation/in_res.pdf", width = 20, height = 20)
 summary_plot(in_res, "extinct")
 dev.off()
 
 ### Kappa variation
-kappa3 <- run_sims(summary, kappa = 3, c = 2, config_only = TRUE)
+kappa_high <- run_sims(summary, kappa = 3, config_only = TRUE)
 
-# pdf("mutation_rate_variation/kappa3.pdf", width = 20, height = 20)
-summary_plot(kappa3, "extinct")
-# dev.off()
+pdf("mutation_rate_variation/kappa_high.pdf", width = 20, height = 20)
+summary_plot(kappa_high, "extinct")
+dev.off()
 
-kappa0.5 <- run_sims(summary, kappa = 0.1, c = 0.5, config_only = TRUE)
-summary_plot(kappa0.5, "extinct")
+kappa_low <- run_sims(summary, kappa = 0.2, config_only = TRUE)
+
+pdf("mutation_rate_variation/kappa_low.pdf", width = 20, height = 20)
+summary_plot(kappa_low, "extinct")
+dev.off()
+
+### Resistance costs
+costs <- run_sims(summary, cost = 0.1, config_only = TRUE)
+pdf("mutation_rate_variation/costs.pdf", width = 20, height = 20)
+summary_plot(costs, "extinct")
+dev.off()
+
+### Altered net growth
+net <- run_sims(summary, c = 2, net = -0.1, kappa = 1, config_only = TRUE)
+pdf("mutation_rate_variation/net.pdf", width = 20, height = 20)
+summary_plot(net, "extinct")
+dev.off()
+
+net_kappa <- run_sims(summary, c = 2, net = -0.1, kappa = 3, config_only = TRUE)
+pdf("mutation_rate_variation/net_kappa.pdf", width = 20, height = 20)
+summary_plot(net_kappa, "extinct")
+dev.off()
 
 ### Simulations
-summary <- expand.grid(cA = seq(0.01, 0.99, length.out = 10), m_ratio = 2 ^ seq(-10, 10, length.out = 10), cidal_A = c(1), cidal_B = c(1))
-simulations <- run_sims(summary, config_only = FALSE, rep = 1e2)
+summary <- expand.grid(cA = seq(0.01, 0.99, length.out = 10), m_ratio = 2 ^ seq(-10, 10, length.out = 10), cidal_A = c(0, 1), cidal_B = c(0, 1))
+simulations <- run_sims(summary, config_only = FALSE, rep = 1e3)
+pdf("mutation_rate_variation/simulations.pdf", width = 20, height = 20)
 summary_plot(simulations, "extinct")
+dev.off()
+
+save(simulations, file = "mutation_rate_variation/simulations.rdata")
+
+### Pharmacokinetics
+
+summary <- expand.grid(cA = 1 / (1 + 2 ^ seq(-5, 5, length.out = 10)), m_ratio = 2 ^ seq(-10, 10, length.out = 10), cidal_A = c(0, 1), cidal_B = c(0, 1))
+pk <- run_sims(summary, gap = 12, d = 0.15, net = -0.1, config_only = FALSE, rep = 1e2)
+pdf("mutation_rate_variation/pk.pdf", width = 20, height = 20)
+summary_plot(pk, "extinct")
+dev.off()
+
+save(pk, file = "mutation_rate_variation/pk.rdata")
