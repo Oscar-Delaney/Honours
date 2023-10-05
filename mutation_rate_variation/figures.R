@@ -181,7 +181,8 @@ summary_plot(net_kappa, "extinct")
 dev.off()
 
 ### Simulations
-summary <- expand.grid(cA = seq(0.01, 0.99, length.out = 10), m_ratio = 2 ^ seq(-10, 10, length.out = 10), cidal_A = c(0, 1), cidal_B = c(0, 1))
+# summary <- expand.grid(cA = seq(0.01, 0.99, length.out = 20), m_ratio = 2 ^ seq(-10, 10, length.out = 20), cidal_A = c(0, 1), cidal_B = c(0, 1))
+summary <- expand.grid(cA = 1 / (1 + 2 ^ seq(-5, 5, length.out = 20)), m_ratio = 2 ^ seq(-10, 10, length.out = 20), cidal_A = c(0, 1), cidal_B = c(0, 1))
 simulations <- run_sims(summary, config_only = FALSE, rep = 1e3)
 pdf("mutation_rate_variation/simulations.pdf", width = 20, height = 20)
 summary_plot(simulations, "extinct")
@@ -191,8 +192,7 @@ save(simulations, file = "mutation_rate_variation/simulations.rdata")
 
 ### Pharmacokinetics
 
-summary <- expand.grid(cA = 1 / (1 + 2 ^ seq(-5, 5, length.out = 10)), m_ratio = 2 ^ seq(-10, 10, length.out = 10), cidal_A = c(0, 1), cidal_B = c(0, 1))
-pk <- run_sims(summary, gap = 12, d = 0.15, net = -0.1, config_only = FALSE, rep = 1e2)
+pk <- run_sims(summary, gap = 12, d = 0.15, net = -0.1, config_only = FALSE, rep = 1e3)
 pdf("mutation_rate_variation/pk.pdf", width = 20, height = 20)
 summary_plot(pk, "extinct")
 dev.off()
