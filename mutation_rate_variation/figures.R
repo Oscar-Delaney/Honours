@@ -43,6 +43,7 @@ run_sims <- function(summary, config_only = FALSE, rep = 1e2, zeta = 1e9,
 c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
     for (i in seq_len(nrow(summary))) {
         m_A <- 1 / (1 + 1 / summary$m_ratio[i])
+        c_A <- 1 / (1 + 1 / summary$c_ratio[i])
         data <- simulate(
             init = c(N_S = init_S, N_A = 0, N_B = 0, N_AB = 0),
             R0 = 1e10,
@@ -65,7 +66,7 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
             HGT = 0,
             dose_rep = 1,
             dose_gap = gap,
-            influx = c * c(C_A = summary$cA[i], C_B = 1 - summary$cA[i]),
+            influx = c * c(C_A = c_A, C_B = 1 - c_A),
             cycl = FALSE,
             m_A = m * m_A, m_B = m * (1 - m_A),
             d_A = d, d_B = d,
@@ -93,11 +94,11 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
 # plot with two independent variables and one dependent variable
 summary_plot <- function(summary, var) {
     # Find the y-values that maximize 'var' for each x-value
-    summary$approx <- 1 / (1 + (summary$m_ratio) ^ 0.5)
+    summary$approx <- summary$m_ratio ^ -0.5
     # Rename the factor levels with the desired prefixes
     summary$cidal_A <- ifelse(summary$cidal_A == 0, "Drug A: Bacteriostatic", "Drug A: Bactericidal")
     summary$cidal_B <- ifelse(summary$cidal_B == 0, "Drug B: Bacteriostatic", "Drug B: Bactericidal")
-    labels <- expand.grid(m_ratio = 500, cA = 0.95, cidal_A = unique(summary$cidal_A), cidal_B = unique(summary$cidal_B))
+    labels <- expand.grid(m_ratio = 500, c_ratio = 19, cidal_A = unique(summary$cidal_A), cidal_B = unique(summary$cidal_B))
     labels$label <- LETTERS[nrow(labels):1]
 
     max_df <- summary %>%
@@ -106,10 +107,10 @@ summary_plot <- function(summary, var) {
         slice_head(n = 1) %>%
         ungroup()
 
-    ggplot(summary, aes(x = log2(m_ratio), y = log2(cA / (1 - cA)))) +
+    ggplot(summary, aes(x = log2(m_ratio), y = log2(c_ratio))) +
         geom_tile(aes(fill = (get(var)))) +
-        geom_line(aes(x = log2(m_ratio), y = log2(approx / (1 - approx))), color = "green", linewidth = 3) +
-        geom_point(data = max_df, aes(y = log2(cA / (1 - cA)), x = log2(m_ratio)), color = "yellow", size = 3) +
+        geom_line(aes(x = log2(m_ratio), y = log2(approx)), color = "green", linewidth = 3) +
+        geom_point(data = max_df, aes(y = log2(c_ratio), x = log2(m_ratio)), color = "yellow", size = 3) +
         facet_grid(cidal_B ~ cidal_A) +
         geom_text(data = labels, aes(label = label), size = 15, fontface = "bold") +
         labs(fill = "P(extinct)") +
@@ -136,7 +137,7 @@ init_S <- 1e9
 m <- 1e-9
 
 ### Basic
-summary <- expand.grid(cA = 1 / (1 + 2 ^ seq(-5, 5, 0.2)), m_ratio = 2 ^ seq(-10, 10, 0.5), cidal_A = c(0, 1), cidal_B = c(0, 1))
+summary <- expand.grid(c_ratio = 2 ^ seq(-5, 5, 1), m_ratio = 2 ^ seq(-10, 10, 2), cidal_A = c(0, 1), cidal_B = c(0, 1))
 basic <- run_sims(summary, config_only = TRUE)
 
 pdf("mutation_rate_variation/basic2.pdf", width = 20, height = 20)
