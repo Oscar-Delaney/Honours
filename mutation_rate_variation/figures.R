@@ -39,7 +39,7 @@ theory_extinct <- function(phi, N, m) {
     (1 - m * (1 - phi)) ^ N
 }
 
-run_sims <- function(summary, config_only = FALSE, rep = 1e2, zeta = 1e9,
+run_sims <- function(summary, config_only = FALSE, rep = 1e3, zeta = 1e9,
 c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
     for (i in seq_len(nrow(summary))) {
         m_A <- 1 / (1 + 1 / summary$m_ratio[i])
@@ -92,25 +92,28 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
     return(summary)
 }
 # plot with two independent variables and one dependent variable
-summary_plot <- function(summary, var) {
+summary_plot <- function(fine, coarse, var = "extinct") {
     # Find the y-values that maximize 'var' for each x-value
-    summary$approx <- summary$m_ratio ^ -0.5
-    # Rename the factor levels with the desired prefixes
-    summary$cidal_A <- ifelse(summary$cidal_A == 0, "Drug A: Bacteriostatic", "Drug A: Bactericidal")
-    summary$cidal_B <- ifelse(summary$cidal_B == 0, "Drug B: Bacteriostatic", "Drug B: Bactericidal")
-    labels <- expand.grid(m_ratio = 500, c_ratio = 19, cidal_A = unique(summary$cidal_A), cidal_B = unique(summary$cidal_B))
-    labels$label <- LETTERS[nrow(labels):1]
-
-    max_df <- summary %>%
+    # fine$approx <- fine$m_ratio ^ -0.5
+    max_df <- fine %>%
         group_by(cidal_A, cidal_B, m_ratio) %>%
         arrange(desc(get(var))) %>%
         slice_head(n = 1) %>%
         ungroup()
+    max_df$theory <- max_df$m_ratio ^ -0.5
 
-    ggplot(summary, aes(x = log2(m_ratio), y = log2(c_ratio))) +
+    # Rename the factor levels with the desired prefixes
+    max_df$cidal_A <- ifelse(max_df$cidal_A == 0, "Drug A: Bacteriostatic", "Drug A: Bactericidal")
+    max_df$cidal_B <- ifelse(max_df$cidal_B == 0, "Drug B: Bacteriostatic", "Drug B: Bactericidal")
+    coarse$cidal_A <- ifelse(coarse$cidal_A == 0, "Drug A: Bacteriostatic", "Drug A: Bactericidal")
+    coarse$cidal_B <- ifelse(coarse$cidal_B == 0, "Drug B: Bacteriostatic", "Drug B: Bactericidal")
+    labels <- expand.grid(m_ratio = 500, c_ratio = 19, cidal_A = unique(coarse$cidal_A), cidal_B = unique(coarse$cidal_B))
+    labels$label <- LETTERS[nrow(labels):1]
+
+    ggplot(coarse, aes(x = log2(m_ratio), y = log2(c_ratio))) +
         geom_tile(aes(fill = (get(var)))) +
-        geom_line(aes(x = log2(m_ratio), y = log2(approx)), color = "green", linewidth = 3) +
-        geom_point(data = max_df, aes(y = log2(c_ratio), x = log2(m_ratio)), color = "yellow", size = 3) +
+        geom_line(data = max_df, aes(x = log2(m_ratio), y = log2(theory)), color = "green", linewidth = 3) +
+        geom_line(data = max_df, aes(x = log2(m_ratio), y = log2(c_ratio)), color = "yellow", linewidth = 3) +
         facet_grid(cidal_B ~ cidal_A) +
         geom_text(data = labels, aes(label = label), size = 15, fontface = "bold") +
         labs(fill = "P(extinct)") +
@@ -132,70 +135,88 @@ summary_plot <- function(summary, var) {
         )
 }
 
+dir <- "mutation_rate_variation/figs/"
 # Create a grid of parameter combinations
 init_S <- 1e9
 m <- 1e-9
+summary_fine <- expand.grid(c_ratio = 2 ^ seq(-6, 6, length.out = 200), m_ratio = 2 ^ seq(-10, 10, length.out = 200), cidal_A = c(0, 1), cidal_B = c(0, 1))
+summary_coarse <- expand.grid(c_ratio = 2 ^ seq(-5, 5, length.out = 20), m_ratio = 2 ^ seq(-10, 10, length.out = 20), cidal_A = c(0, 1), cidal_B = c(0, 1))
 
 ### Basic
-summary <- expand.grid(c_ratio = 2 ^ seq(-5, 5, 1), m_ratio = 2 ^ seq(-10, 10, 2), cidal_A = c(0, 1), cidal_B = c(0, 1))
-basic <- run_sims(summary, config_only = TRUE)
+basic_fine <- run_sims(summary_fine, config_only = TRUE)
+basic_coarse <- run_sims(summary_coarse, config_only = FALSE, rep = 10)
 
-pdf("mutation_rate_variation/basic2.pdf", width = 20, height = 20)
-summary_plot(basic, "extinct")
+
+pdf(paste0(dir, "basic.pdf"), width = 20, height = 20)
+summary_plot(basic_fine, basic_coarse)
 dev.off()
+
+save(basic_fine, basic_coarse, file = paste0(dir, "basic.rdata"))
 
 ### Incomplete resistance
-in_res <- run_sims(summary, zeta = 25, config_only = TRUE)
+in_res_fine <- run_sims(summary_fine, zeta = 25, config_only = TRUE)
+in_res_coarse <- run_sims(summary_coarse, zeta = 25, config_only = FALSE)
 
-pdf("mutation_rate_variation/in_res.pdf", width = 20, height = 20)
-summary_plot(in_res, "extinct")
+pdf(paste0(dir, "in_res.pdf"), width = 20, height = 20)
+summary_plot(in_res_fine, in_res_coarse)
 dev.off()
+
+save(in_res_fine, in_res_coarse, file = paste0(dir, "in_res.rdata"))
 
 ### Kappa variation
-kappa_high <- run_sims(summary, kappa = 3, config_only = TRUE)
+kappa_high_fine <- run_sims(summary_fine, kappa = 3, config_only = TRUE)
+kappa_high_coarse <- run_sims(summary_coarse, kappa = 3, config_only = FALSE, rep = 10)
 
-pdf("mutation_rate_variation/kappa_high.pdf", width = 20, height = 20)
-summary_plot(kappa_high, "extinct")
+pdf(paste0(dir, "kappa_high.pdf"), width = 20, height = 20)
+summary_plot(kappa_high_fine, kappa_high_coarse)
 dev.off()
 
-kappa_low <- run_sims(summary, kappa = 0.2, config_only = TRUE)
+save(kappa_high_fine, kappa_high_coarse, file = paste0(dir, "kappa_high.rdata"))
 
-pdf("mutation_rate_variation/kappa_low.pdf", width = 20, height = 20)
-summary_plot(kappa_low, "extinct")
+kappa_low_fine <- run_sims(summary_fine, kappa = 0.2, config_only = TRUE)
+kappa_low_coarse <- run_sims(summary_coarse, kappa = 0.2, config_only = FALSE, rep = 10)
+
+pdf(paste0(dir, "kappa_low.pdf"), width = 20, height = 20)
+summary_plot(kappa_low_fine, kappa_low_coarse)
 dev.off()
+
+save(kappa_low_fine, kappa_low_coarse, file = paste0(dir, "kappa_low.rdata"))
 
 ### Resistance costs
-costs <- run_sims(summary, cost = 0.1, config_only = TRUE)
-pdf("mutation_rate_variation/costs.pdf", width = 20, height = 20)
-summary_plot(costs, "extinct")
+costs_fine <- run_sims(summary_fine, cost = 0.1, config_only = TRUE)
+costs_coarse <- run_sims(summary_coarse, cost = 0.1, config_only = FALSE, rep = 10)
+
+pdf(paste0(dir, "costs.pdf"), width = 20, height = 20)
+summary_plot(costs_fine, costs_coarse)
 dev.off()
+
+save(costs_fine, costs_coarse, file = paste0(dir, "costs.rdata"))
 
 ### Altered net growth
-net <- run_sims(summary, c = 2, net = -0.1, kappa = 1, config_only = TRUE)
-pdf("mutation_rate_variation/net.pdf", width = 20, height = 20)
-summary_plot(net, "extinct")
+net_fine <- run_sims(summary_fine, c = 2, net = -0.1, kappa = 1, config_only = TRUE)
+net_coarse <- run_sims(summary_coarse, c = 2, net = -0.1, kappa = 1, config_only = FALSE, rep = 10)
+
+pdf(paste0(dir, "net.pdf"), width = 20, height = 20)
+summary_plot(net_fine, net_coarse)
 dev.off()
 
-net_kappa <- run_sims(summary, c = 2, net = -0.1, kappa = 3, config_only = TRUE)
-pdf("mutation_rate_variation/net_kappa.pdf", width = 20, height = 20)
-summary_plot(net_kappa, "extinct")
+save(net_fine, net_coarse, file = paste0(dir, "net.rdata"))
+
+net_kappa_fine <- run_sims(summary_fine, c = 2, net = -0.1, kappa = 3, config_only = TRUE)
+net_kappa_coarse <- run_sims(summary_coarse, c = 2, net = -0.1, kappa = 3, config_only = FALSE, rep = 10)
+
+pdf(paste0(dir, "net_kappa.pdf"), width = 20, height = 20)
+summary_plot(net_kappa_fine, net_kappa_coarse)
 dev.off()
 
-### Simulations
-# summary <- expand.grid(cA = seq(0.01, 0.99, length.out = 20), m_ratio = 2 ^ seq(-10, 10, length.out = 20), cidal_A = c(0, 1), cidal_B = c(0, 1))
-summary <- expand.grid(cA = 1 / (1 + 2 ^ seq(-5, 5, length.out = 20)), m_ratio = 2 ^ seq(-10, 10, length.out = 20), cidal_A = c(0, 1), cidal_B = c(0, 1))
-simulations <- run_sims(summary, config_only = FALSE, rep = 1e3)
-pdf("mutation_rate_variation/simulations.pdf", width = 20, height = 20)
-summary_plot(simulations, "extinct")
-dev.off()
-
-save(simulations, file = "mutation_rate_variation/simulations.rdata")
+save(net_kappa_fine, net_kappa_coarse, file = paste0(dir, "net_kappa.rdata"))
 
 ### Pharmacokinetics
+pk_fine <- run_sims(summary_fine, gap = 12, d = 0.15, net = -0.1, config_only = TRUE)
+pk_coarse <- run_sims(summary_coarse, gap = 12, d = 0.15, net = -0.1, config_only = FALSE, rep = 1e3)
 
-pk <- run_sims(summary, gap = 12, d = 0.15, net = -0.1, config_only = FALSE, rep = 1e3)
-pdf("mutation_rate_variation/pk.pdf", width = 20, height = 20)
-summary_plot(pk, "extinct")
+pdf(paste0(dir, "pk.pdf"), width = 20, height = 20)
+summary_plot(pk_fine, pk_coarse)
 dev.off()
 
-save(pk, file = "mutation_rate_variation/pk.rdata")
+save(pk_fine, pk_coarse, file = paste0(dir, "pk.rdata"))
