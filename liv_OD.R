@@ -1,54 +1,37 @@
-# Step 1: Load necessary libraries
 library(tidyverse)
-library(car)
-library(lmtest)
 
-# Step 2: Load the dataset
+# Load and clean the dataset
 data <- read.csv("OD_data_wrangled.csv")
-data <- data[!(data$Treatment == "No drug" & data$Replicate %in% c(7,8)),]
+# there is actually no data, all just 0s, so remove those rows
+data <- data[!(data$Treatment == "No drug" & data$Replicate %in% 5:8),]
+# also remove the one aberrent replicate that had unexpected growth
+data <- data[!(data$Treatment == "Combination" & data$Strain =="AB13" & data$Replicate == 6),]
+
+# ensure correct data types
 data$transfer <- as.integer(sub("^T", "", data$transfer))
 data$Strain <- as.factor(data$Strain)
 data$Treatment <- as.factor(data$Treatment)
 data$Environment <- as.factor(data$Environment)
+data$shift <- as.factor(substr(data$plateID, nchar(data$plateID) - 6, nchar(data$plateID)))
+data$rep_factor <- as.factor(data$Replicate)
+
+# make growth a binary variable
+hist(data$OD[data$Environment != "!B" & data$Treatment != "!Combination"], breaks = 50)
+# based on this histogram, choose an appropriate cutoff for growth/no growth
 data$growth <- ifelse(data$OD >= 0.3, 1, 0)
-# Step 3: Preliminary data exploration
-head(data)
-summary(data)
+# check the mean of the two groups
+data %>% group_by(growth) %>% summarise(mean_growth = mean(OD))
 
-# Check for any missing values
-if(any(is.na(data))){
-  print("Data contains missing values")
-} else {
-  print("No missing values found")
-}
+# Check whether shift is a significant predictor of growth
+t.test(growth ~ shift, data = data)
 
-# Step 4: Build a linear regression model
-# Note: This is a basic linear regression model. If you need more complex models 
-# like mixed effects, interactions, or transformations, those will need to be added.
-model <- lm(growth ~ Strain + transfer + Treatment + Replicate + Environment, data = data)
-model <- lm(growth ~ Strain * Environment + Treatment + Replicate + transfer, data = data)
-model <- glm(growth ~ Treatment, data = data[data$Environment == "B", ], family = binomial)
-# plot(data$Replicate, data$OD, col = data$Strain)
-# Step 5: Check assumptions of the regression
-# Residuals vs Fitted values
-plot(model, which = 1)
+# Check whether replicate is a significant predictor of growth
+model_rep <- glm(growth ~ rep_factor, data = data, family = binomial)
+summary(model_rep)
 
-# Normal Q-Q plot
-plot(model, which = 2)
+# Check growth in each env
+data %>% group_by(growth, Environment) %>% summarise(n = n())
 
-# Scale-Location plot
-plot(model, which = 3)
-
-# Residuals vs Leverage
-plot(model, which = 5)
-
-# Check for heteroscedasticity
-bptest(model)
-
-# Check for multicollinearity
-vif(model) # Variance Inflation Factor
-
-# Step 6: Summarize results
-summary(model)
-
-data[data$Treatment == "Combination" & data$Environment == "B", "growth"]
+# simple model for data of interest
+model_str <- glm(growth ~ Strain + transfer, data = sub_data, family = binomial)
+summary(model_str)
