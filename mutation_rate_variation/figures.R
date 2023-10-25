@@ -121,88 +121,31 @@ summary_plot <- function(fine, coarse, var = "extinct") {
         )
 }
 
+# Automate the data creation and visualisation workflow
+run_and_save <- function(name, args = list()) {
+  # Run simulations
+  fine_sims <- do.call(run_sims, c(list(fine, config_only = TRUE), args))
+  print("Fine done")
+  coarse_sims <- do.call(run_sims, c(list(coarse, config_only = FALSE), args))
+  # Save the plot and data
+  ggsave(plot = summary_plot(fine_sims, coarse_sims),
+    filename = paste0(dir, name, ".pdf"), width = 20, height = 20)
+  save(fine_sims, coarse_sims, file = paste0(dir, name, ".rdata"))
+}
+
+# defines some static objects
 dir <- "mutation_rate_variation/figs/"
-# Create a grid of parameter combinations
 init_S <- 1e9
 m <- 1e-9
 fine <- create_grid(30)
 coarse <- create_grid(3)
 
-### Basic
-basic_fine <- run_sims(summary_fine, config_only = TRUE)
-basic_coarse <- run_sims(summary_coarse, config_only = FALSE, rep = 10)
-
-
-pdf(paste0(dir, "basic.pdf"), width = 20, height = 20)
-summary_plot(basic_fine, basic_coarse)
-dev.off()
-
-save(basic_fine, basic_coarse, file = paste0(dir, "basic.rdata"))
-
-### Incomplete resistance
-in_res_fine <- run_sims(summary_fine, zeta = 25, config_only = TRUE)
-in_res_coarse <- run_sims(summary_coarse, zeta = 25, config_only = FALSE)
-
-pdf(paste0(dir, "in_res.pdf"), width = 20, height = 20)
-summary_plot(in_res_fine, in_res_coarse)
-dev.off()
-
-save(in_res_fine, in_res_coarse, file = paste0(dir, "in_res.rdata"))
-
-### Kappa variation
-kappa_high_fine <- run_sims(summary_fine, kappa = 3, config_only = TRUE)
-kappa_high_coarse <- run_sims(summary_coarse, kappa = 3, config_only = FALSE, rep = 10)
-
-pdf(paste0(dir, "kappa_high.pdf"), width = 20, height = 20)
-summary_plot(kappa_high_fine, kappa_high_coarse)
-dev.off()
-
-save(kappa_high_fine, kappa_high_coarse, file = paste0(dir, "kappa_high.rdata"))
-
-kappa_low_fine <- run_sims(summary_fine, kappa = 0.2, config_only = TRUE)
-kappa_low_coarse <- run_sims(summary_coarse, kappa = 0.2, config_only = FALSE, rep = 10)
-
-pdf(paste0(dir, "kappa_low.pdf"), width = 20, height = 20)
-summary_plot(kappa_low_fine, kappa_low_coarse)
-dev.off()
-
-save(kappa_low_fine, kappa_low_coarse, file = paste0(dir, "kappa_low.rdata"))
-
-### Resistance costs
-costs_fine <- run_sims(summary_fine, cost = 0.1, config_only = TRUE)
-costs_coarse <- run_sims(summary_coarse, cost = 0.1, config_only = FALSE, rep = 10)
-
-pdf(paste0(dir, "costs.pdf"), width = 20, height = 20)
-summary_plot(costs_fine, costs_coarse)
-dev.off()
-
-save(costs_fine, costs_coarse, file = paste0(dir, "costs.rdata"))
-
-### Altered net growth
-net_fine <- run_sims(summary_fine, c = 2, net = -0.1, kappa = 1, config_only = TRUE)
-net_coarse <- run_sims(summary_coarse, c = 2, net = -0.1, kappa = 1, config_only = FALSE, rep = 10)
-
-pdf(paste0(dir, "net.pdf"), width = 20, height = 20)
-summary_plot(net_fine, net_coarse)
-dev.off()
-
-save(net_fine, net_coarse, file = paste0(dir, "net.rdata"))
-
-net_kappa_fine <- run_sims(summary_fine, c = 2, net = -0.1, kappa = 3, config_only = TRUE)
-net_kappa_coarse <- run_sims(summary_coarse, c = 2, net = -0.1, kappa = 3, config_only = FALSE, rep = 10)
-
-pdf(paste0(dir, "net_kappa.pdf"), width = 20, height = 20)
-summary_plot(net_kappa_fine, net_kappa_coarse)
-dev.off()
-
-save(net_kappa_fine, net_kappa_coarse, file = paste0(dir, "net_kappa.rdata"))
-
-### Pharmacokinetics
-pk_fine <- run_sims(summary_fine, gap = 12, d = 0.15, net = -0.1, config_only = TRUE)
-pk_coarse <- run_sims(summary_coarse, gap = 12, d = 0.15, net = -0.1, config_only = FALSE, rep = 1e3)
-
-pdf(paste0(dir, "pk.pdf"), width = 20, height = 20)
-summary_plot(pk_fine, pk_coarse)
-dev.off()
-
-save(pk_fine, pk_coarse, file = paste0(dir, "pk.rdata"))
+# Run the simulations and create graphs for each scenario
+run_and_save("basic")
+run_and_save("in_res", args = list(zeta = 25))
+run_and_save("kappa_high", args = list(kappa = 3))
+run_and_save("kappa_low", args = list(kappa = 0.2))
+run_and_save("costs", args = list(cost = 0.1))
+run_and_save("net", args = list(c = 2, net = -0.1, kappa = 1))
+run_and_save("net_kappa", args = list(c = 2, net = -0.1, kappa = 3))
+run_and_save("pk", args = list(gap = 12, d = 0.15, net = -0.1))
