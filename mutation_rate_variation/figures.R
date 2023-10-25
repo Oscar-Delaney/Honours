@@ -16,8 +16,9 @@ target_hit <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")
   !is.na(target_time(sol, target, strains))
 }
 
+# Run many simulations in sequence with set parameters
 run_sims <- function(summary, config_only = FALSE, rep = 1e3, zeta = 1e9,
-c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
+c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
     for (i in seq_len(nrow(summary))) {
         m_A <- 1 / (1 + 1 / summary$m_ratio[i])
         c_A <- 1 / (1 + 1 / summary$c_ratio[i])
@@ -32,6 +33,7 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
             bcidal_B = summary$cidal_B[i],
             bstatic_A = 1 - summary$cidal_A[i],
             bstatic_B = 1 - summary$cidal_B[i],
+            zeta_rand = zeta_rand,
             zeta_A = c(N_S = 1, N_A = zeta, N_B = 1, N_AB = zeta),
             zeta_B = c(N_S = 1, N_A = 1, N_B = zeta, N_AB = zeta),
             delta = 1 - 1 / (1 + c ^ -kappa) - net,
@@ -51,12 +53,33 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
             config_only = config_only
         )
         if (config_only) {
-            v <- with(data, as.list(rates(c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1, R = R0, influx * pattern), data, 0)))
-            summary$phi[i] <- with(v, m_A * pmin(1, N_A_death / N_A_growth) +
-                (1 - m_A) * pmin(1, N_B_death / N_B_growth))
-            summary$N[i] <- with(v, init_S / (pmax(1e-30, S_death / S_growth - 1)))
-            # summary$extinct[i] <- (1 - m * (1 - summary$phi[i])) ^ summary$N[i]
-            summary$extinct[i] <- exp(-m * (1 - summary$phi[i]) * summary$N[i])
+            if (zeta_rand == TRUE) {
+                phi_values <- numeric(rep)
+                N_values <- numeric(rep)
+                extinct_values <- numeric(rep)
+                zeta_A <- data$zeta_A
+                zeta_B <- data$zeta_B
+                for(j in 1:rep) {
+                    zeta_randomised <- randomise_zeta(zeta_A, zeta_B)
+                    data$zeta_A <- zeta_randomised[[1]]
+                    data$zeta_B <- zeta_randomised[[2]]
+                    v <- with(data, as.list(rates(c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1, R = R0, influx * pattern), data, 0)))
+                    phi_values[j] <- with(v, m_A * pmin(1, N_A_death / N_A_growth) +
+                        (1 - m_A) * pmin(1, N_B_death / N_B_growth))
+                    N_values[j] <- with(v, init_S / (pmax(1e-30, S_death / S_growth - 1)))
+                    extinct_values[j] <- exp(-m * (1 - phi_values[j]) * N_values[j])
+                }
+                summary$phi[i] <- mean(phi_values)
+                summary$N[i] <- mean(N_values)
+                summary$extinct[i] <- mean(extinct_values)
+            } else{
+                v <- with(data, as.list(rates(c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1, R = R0, influx * pattern), data, 0)))
+                summary$phi[i] <- with(v, m_A * pmin(1, N_A_death / N_A_growth) +
+                    (1 - m_A) * pmin(1, N_B_death / N_B_growth))
+                summary$N[i] <- with(v, init_S / (pmax(1e-30, S_death / S_growth - 1)))
+                # summary$extinct[i] <- (1 - m * (1 - summary$phi[i])) ^ summary$N[i]
+                summary$extinct[i] <- exp(-m * (1 - summary$phi[i]) * summary$N[i])
+            }
         } else {
         wins <- !target_hit(data[[1]], target = 1e3, strains = c("N_A", "N_B"))
         summary$extinct[i] <- mean(wins)
@@ -137,12 +160,12 @@ run_and_save <- function(name, args = list()) {
 dir <- "mutation_rate_variation/figs/"
 init_S <- 1e9
 m <- 1e-9
-fine <- create_grid(30)
-coarse <- create_grid(3)
+fine <- create_grid(200)
+coarse <- create_grid(20)
 
 # Run the simulations and create graphs for each scenario
 run_and_save("basic")
-run_and_save("in_res", args = list(zeta = 25))
+run_and_save("in_res", args = list(zeta = 10, zeta_rand = TRUE))
 run_and_save("kappa_high", args = list(kappa = 3))
 run_and_save("kappa_low", args = list(kappa = 0.2))
 run_and_save("costs", args = list(cost = 0.1))

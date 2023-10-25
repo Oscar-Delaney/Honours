@@ -113,10 +113,27 @@ ode_rates <- function(t, state, config) {
   })
 }
 
+# randomise zeta
+randomise_zeta <- function(zeta_A, zeta_B) {
+  zA <- 1 + rexp(1, 1 / (zeta_A["N_A"] - 1))
+  zB <- 1 + rexp(1, 1 / (zeta_B["N_B"] - 1))
+  zeta_A["N_A"] <- zA
+  zeta_A["N_AB"] <- zA
+  zeta_B["N_B"] <- zB
+  zeta_B["N_AB"] <- zB
+  return(list(zeta_A, zeta_B))
+}
+
 # a function to implement one run of the model
 single_run <- function(config, x) {
   # Optionally randomise the pattern
   if (config$first == "rand") config$pattern <- sample(c(0, 1))
+  # Optionally randomise the zeta values
+  if (config$zeta_rand == TRUE) {
+    zeta <- randomise_zeta(config$zeta_A, config$zeta_B)
+    config$zeta_A <- zeta[[1]]
+    config$zeta_B <- zeta[[2]]
+  }
   with(config, {
     # Define the transitions of the model
     transitions <- make_transitions()
@@ -195,6 +212,7 @@ simulate <- function(
   bstatic_B = 0, # maximum reduction in growth rate due to drug B
   influx = 7 * c(C_A = 1, C_B = 1), # drug influx concentrations, units of zeta_s
   init = c(N_S = 1e12, N_A = 0, N_B = 0, N_AB = 0), # initial population sizes
+  zeta_rand = FALSE, # should be either TRUE or FALSE
   zeta_A = c(N_S = 1, N_A = 28, N_B = 1, N_AB = 28), # [drug A] at half-max effect
   zeta_B = c(N_S = 1, N_A = 1, N_B = 28, N_AB = 28), # [drug B] at half-max effect
   kappa_A = c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1), # Hill function shape parameter
