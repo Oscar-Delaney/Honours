@@ -16,29 +16,6 @@ target_hit <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")
   !is.na(target_time(sol, target, strains))
 }
 
-theory_d <- function(C, zeta = 1) {
-    1 / (1 + zeta / C)
-}
-
-theory_N <- function(delta, d_A, d_B, mu, init_S, bcidal, bstatic) {
-    mu <- mu * (1 - bstatic * d_A) * (1 - bstatic * d_B)
-    N <- init_S * mu / (delta + bcidal * (d_A + d_B) - mu)
-    ifelse(N < 0, Inf, N)
-}
-
-theory_phi <- function(m_A, c_A, c_B, bcidal, bstatic, delta, zeta, mu) {
-    d_A <- theory_d(c_A, 1)
-    d_A_R <- theory_d(c_A, zeta)
-    d_B <- theory_d(c_B, 1)
-    d_B_R <- theory_d(c_B, zeta)
-    pmin(1, m_A * (delta + bcidal * (d_B + d_A_R)) / (mu * (1 - bstatic * d_A_R) * (1 - bstatic * d_B)) +
-    (1 - m_A) * (delta + bcidal * (d_A + d_B_R)) / (mu * (1 - bstatic * d_A) * (1 - bstatic * d_B_R)))
-}
-
-theory_extinct <- function(phi, N, m) {
-    (1 - m * (1 - phi)) ^ N
-}
-
 run_sims <- function(summary, config_only = FALSE, rep = 1e3, zeta = 1e9,
 c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
     for (i in seq_len(nrow(summary))) {
