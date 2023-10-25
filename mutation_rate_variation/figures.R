@@ -68,6 +68,15 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4) {
     }
     return(summary)
 }
+
+# Create a grid of parameter values to test
+create_grid <- function(length = 10) {
+  expand.grid(c_ratio = 2 ^ seq(-5, 5, length.out = length),
+              m_ratio = 2 ^ seq(-10, 10, length.out = length),
+              cidal_A = c(0, 1),
+              cidal_B = c(0, 1))
+}
+
 # plot with two independent variables and one dependent variable
 summary_plot <- function(fine, coarse, var = "extinct") {
     # Find the y-values that maximize 'var' for each x-value
@@ -116,8 +125,8 @@ dir <- "mutation_rate_variation/figs/"
 # Create a grid of parameter combinations
 init_S <- 1e9
 m <- 1e-9
-summary_fine <- expand.grid(c_ratio = 2 ^ seq(-6, 6, length.out = 200), m_ratio = 2 ^ seq(-10, 10, length.out = 200), cidal_A = c(0, 1), cidal_B = c(0, 1))
-summary_coarse <- expand.grid(c_ratio = 2 ^ seq(-5, 5, length.out = 20), m_ratio = 2 ^ seq(-10, 10, length.out = 20), cidal_A = c(0, 1), cidal_B = c(0, 1))
+fine <- create_grid(30)
+coarse <- create_grid(3)
 
 ### Basic
 basic_fine <- run_sims(summary_fine, config_only = TRUE)
