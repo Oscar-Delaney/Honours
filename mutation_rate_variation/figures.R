@@ -55,33 +55,30 @@ c = 2, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
             config_only = config_only
         )
         if (config_only) {
-            if (zeta_rand == TRUE) {
-                phi_values <- numeric(rep)
-                N_values <- numeric(rep)
-                extinct_values <- numeric(rep)
-                zeta_A <- data$zeta_A
-                zeta_B <- data$zeta_B
-                for(j in 1:rep) {
-                    zeta_randomised <- randomise_zeta(zeta_A, zeta_B)
-                    data$zeta_A <- zeta_randomised[[1]]
-                    data$zeta_B <- zeta_randomised[[2]]
-                    v <- with(data, as.list(rates(c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1, R = R0, influx * pattern), data, 0)))
-                    phi_values[j] <- with(v, m_A * pmin(1, N_A_death / N_A_growth) +
-                        (1 - m_A) * pmin(1, N_B_death / N_B_growth))
-                    N_values[j] <- with(v, init_S / (pmax(1e-30, S_death / S_growth - 1)))
-                    extinct_values[j] <- exp(-m * (1 - phi_values[j]) * N_values[j])
+            n <- rep ^ zeta_rand
+            phi_values <- numeric(n)
+            N_values <- numeric(n)
+            extinct_values <- numeric(n)
+            zeta_A <- data$zeta_A
+            zeta_B <- data$zeta_B
+            for (j in 1:n) {
+                if (zeta_rand == TRUE) {
+                    data$zeta_A["N_A"] <- 1 + qexp(p = j / (n + 1), rate = 1 / (zeta_A["N_A"] - 1))
+                    data$zeta_B["N_B"] <- 1 + qexp(p = j / (n + 1), rate = 1 / (zeta_B["N_B"] - 1))
+                    # zeta_randomised <- randomise_zeta(zeta_A, zeta_B)
+                    # data$zeta_A <- zeta_randomised[[1]]
+                    # data$zeta_B <- zeta_randomised[[2]]
                 }
-                summary$phi[i] <- mean(phi_values)
-                summary$N[i] <- mean(N_values)
-                summary$extinct[i] <- mean(extinct_values)
-            } else{
-                v <- with(data, as.list(rates(c(N_S = 1, N_A = 1, N_B = 1, N_AB = 1, R = R0, influx * pattern), data, 0)))
-                summary$phi[i] <- with(v, m_A * pmin(1, N_A_death / N_A_growth) +
+                v <- with(data, as.list(rates(c(N_S = 1, N_A = 1, N_B = 1,
+                    N_AB = 1, R = R0, influx * pattern), data, 0)))
+                phi_values[j] <- with(v, m_A * pmin(1, N_A_death / N_A_growth) +
                     (1 - m_A) * pmin(1, N_B_death / N_B_growth))
-                summary$N[i] <- with(v, init_S / (pmax(1e-30, S_death / S_growth - 1)))
-                # summary$extinct[i] <- (1 - m * (1 - summary$phi[i])) ^ summary$N[i]
-                summary$extinct[i] <- exp(-m * (1 - summary$phi[i]) * summary$N[i])
+                N_values[j] <- with(v, init_S / (pmax(1e-30, S_death / S_growth - 1)))
+                extinct_values[j] <- exp(-m * (1 - phi_values[j]) * N_values[j])
             }
+            summary$phi[i] <- mean(phi_values)
+            summary$N[i] <- mean(N_values)
+            summary$extinct[i] <- mean(extinct_values)
         } else {
         wins <- !target_hit(data[[1]], target = 1e2, strains = c("N_A", "N_B"))
         summary$extinct[i] <- mean(wins)
