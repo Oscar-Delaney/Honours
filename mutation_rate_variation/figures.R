@@ -39,7 +39,7 @@ c = 2, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
             zeta_A = c(N_S = 1, N_A = zeta, N_B = 1, N_AB = zeta),
             zeta_B = c(N_S = 1, N_A = 1, N_B = zeta, N_AB = zeta),
             delta = 1 - 1 / (1 + c ^ -kappa) - net,
-            time = 50,
+            time = 100 * 5 ^ ((1 - summary$cidal_A[i]) * (1 - summary$cidal_B[i])),
             tau = 1e4,
             max_step = 1e-1,
             kappa_A = kappa, kappa_B = kappa,
@@ -83,7 +83,7 @@ c = 2, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
                 summary$extinct[i] <- exp(-m * (1 - summary$phi[i]) * summary$N[i])
             }
         } else {
-        wins <- !target_hit(data[[1]], target = 1e3, strains = c("N_A", "N_B"))
+        wins <- !target_hit(data[[1]], target = 1e2, strains = c("N_A", "N_B"))
         summary$extinct[i] <- mean(wins)
         ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
         summary$ymin[i] <- ci[1]
