@@ -100,14 +100,16 @@ create_grid <- function(length = 10) {
 }
 
 # plot with two independent variables and one dependent variable
-summary_plot <- function(fine, coarse, var = "extinct") {
+summary_plot <- function(fine, coarse, var = "extinct", theory = TRUE) {
     # Find the y-values that maximize 'var' for each x-value
-    # fine$approx <- fine$m_ratio ^ -0.5
-    max_df <- fine %>%
-        group_by(cidal_A, cidal_B, m_ratio) %>%
-        arrange(desc(get(var))) %>%
-        slice_head(n = 1) %>%
-        ungroup()
+    max_df <- fine
+    if (theory) {
+        max_df <- fine %>%
+            group_by(cidal_A, cidal_B, m_ratio) %>%
+            arrange(desc(get(var))) %>%
+            slice_head(n = 1) %>%
+            ungroup()
+    }
     max_df$theory <- max_df$m_ratio ^ -0.5
 
     # Rename the factor levels with the desired prefixes
@@ -118,10 +120,9 @@ summary_plot <- function(fine, coarse, var = "extinct") {
     labels <- expand.grid(m_ratio = 500, c_ratio = 19, cidal_A = unique(coarse$cidal_A), cidal_B = unique(coarse$cidal_B))
     labels$label <- LETTERS[nrow(labels):1]
 
-    ggplot(coarse, aes(x = log2(m_ratio), y = log2(c_ratio))) +
+    p <- ggplot(coarse, aes(x = log2(m_ratio), y = log2(c_ratio))) +
         geom_tile(aes(fill = (get(var)))) +
         geom_line(data = max_df, aes(x = log2(m_ratio), y = log2(theory)), color = "green", linewidth = 3) +
-        geom_line(data = max_df, aes(x = log2(m_ratio), y = log2(c_ratio)), color = "yellow", linewidth = 3) +
         facet_grid(cidal_B ~ cidal_A) +
         geom_text(data = labels, aes(label = label), size = 15, fontface = "bold") +
         labs(fill = "P(extinct)") +
@@ -141,17 +142,28 @@ summary_plot <- function(fine, coarse, var = "extinct") {
             legend.spacing.x = unit(1, "cm"),
             strip.text = element_text(size = 25, face = "bold")
         )
+
+    if (theory) {
+        p <- p + geom_line(data = max_df, aes(x = log2(m_ratio), y = log2(c_ratio)), color = "yellow", linewidth = 3)
+    }
+
+    return(p)
 }
 
 # Automate the data creation and visualisation workflow
-run_and_save <- function(name, args = list()) {
+run_and_save <- function(name, args = list(), theory = TRUE, sims = TRUE) {
+  fine_sims <- fine
   # Run simulations
-  fine_sims <- do.call(run_sims, c(list(fine, config_only = TRUE), args))
-  print("Fine done")
-  coarse_sims <- do.call(run_sims, c(list(coarse, config_only = FALSE), args))
+  if (theory) {
+    fine_sims <- do.call(run_sims, c(list(fine, config_only = TRUE), args))
+  }
+  coarse_sims <- fine_sims
+  if (sims) {
+    coarse_sims <- do.call(run_sims, c(list(coarse, config_only = FALSE), args))
+  }
   # Save the plot and data
-  ggsave(plot = summary_plot(fine_sims, coarse_sims),
-    filename = paste0(dir, name, ".pdf"), width = 20, height = 20)
+  p <- summary_plot(fine_sims, coarse_sims, theory = theory)
+  ggsave(p, filename = paste0(dir, name, ".pdf"), width = 20, height = 20)
   save(fine_sims, coarse_sims, file = paste0(dir, name, ".rdata"))
 }
 
