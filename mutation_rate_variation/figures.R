@@ -1,3 +1,4 @@
+# setwd("/home/s4528540/Honours")
 source("stochastic.R")
 
 # Time to reach target
@@ -18,7 +19,8 @@ target_hit <- function(sol, target = 1, strains = c("N_S", "N_A", "N_B", "N_AB")
 
 # Run many simulations in sequence with set parameters
 run_sims <- function(summary, config_only = FALSE, rep = 1e3, zeta = 1e9,
-c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
+c = 2, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
+    pb <- txtProgressBar(min = 0, max = nrow(summary), style = 3)
     for (i in seq_len(nrow(summary))) {
         m_A <- 1 / (1 + 1 / summary$m_ratio[i])
         c_A <- 1 / (1 + 1 / summary$c_ratio[i])
@@ -86,7 +88,7 @@ c = 5, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
         ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
         summary$ymin[i] <- ci[1]
         summary$ymax[i] <- ci[2]
-        print(i / nrow(summary))
+        if (i %% 50 == 0) {setTxtProgressBar(pb, i)}
         }
     }
     return(summary)
@@ -166,9 +168,9 @@ coarse <- create_grid(20)
 # Run the simulations and create graphs for each scenario
 run_and_save("basic")
 run_and_save("in_res", args = list(zeta = 10, zeta_rand = TRUE))
-run_and_save("kappa_high", args = list(kappa = 3))
+run_and_save("kappa_high", args = list(c = 5, kappa = 3))
 run_and_save("kappa_low", args = list(kappa = 0.2))
 run_and_save("costs", args = list(cost = 0.1))
 run_and_save("net", args = list(c = 2, net = -0.1, kappa = 1))
 run_and_save("net_kappa", args = list(c = 2, net = -0.1, kappa = 3))
-run_and_save("pk", args = list(gap = 12, d = 0.15, net = -0.1))
+run_and_save("pk", args = list(gap = 12, d = 0.15, net = -0.2), theory = FALSE)
