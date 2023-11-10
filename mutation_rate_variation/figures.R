@@ -85,8 +85,8 @@ c = 2, kappa = 1, cost = 0, net = 0, d = 0, gap = 1e4, zeta_rand = FALSE) {
         ci <- binom.test(sum(wins), length(wins), conf.level = 0.95)$conf.int
         summary$ymin[i] <- ci[1]
         summary$ymax[i] <- ci[2]
-        if (i %% 50 == 0) {setTxtProgressBar(pb, i)}
         }
+        if (i %% 50 == 0) {setTxtProgressBar(pb, i)}
     }
     return(summary)
 }
@@ -176,10 +176,10 @@ coarse <- create_grid(20)
 
 # Run the simulations and create graphs for each scenario
 run_and_save("basic")
-run_and_save("in_res", args = list(zeta = 10, zeta_rand = TRUE))
-run_and_save("kappa_high", args = list(c = 5, kappa = 3))
+run_and_save("in_res", args = list(zeta = 5, zeta_rand = TRUE))
+# run_and_save("kappa_high", args = list(c = 5, kappa = 3))
 run_and_save("kappa_low", args = list(kappa = 0.2))
 run_and_save("costs", args = list(cost = 0.1))
-run_and_save("net", args = list(c = 2, net = -0.1, kappa = 1))
-run_and_save("net_kappa", args = list(c = 2, net = -0.1, kappa = 3))
+# run_and_save("net", args = list(net = -0.1))
+run_and_save("net_kappa", args = list(net = -0.1, kappa = 3))
 run_and_save("pk", args = list(gap = 12, d = 0.15, net = -0.2), theory = FALSE)
