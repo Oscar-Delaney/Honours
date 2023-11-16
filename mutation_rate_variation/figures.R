@@ -100,7 +100,7 @@ create_grid <- function(length = 10) {
 }
 
 # plot with two independent variables and one dependent variable
-summary_plot <- function(fine, coarse, var = "extinct", theory = TRUE) {
+summary_plot <- function(fine, coarse, var = "extinct", theory = TRUE, pare = FALSE) {
     # Find the y-values that maximize 'var' for each x-value
     max_df <- fine
     if (theory) {
@@ -109,6 +109,11 @@ summary_plot <- function(fine, coarse, var = "extinct", theory = TRUE) {
             arrange(desc(get(var))) %>%
             slice_head(n = 1) %>%
             ungroup()
+    }
+    if (pare) {
+        max_df <- max_df %>%
+            # for rows where c_ratio is 2 ^ -5 or 2 ^ 5, set c_ratio to NA
+            mutate(c_ratio = ifelse(c_ratio %in% 2 ^ c(-5, 5), NA, c_ratio))
     }
     max_df$theory <- max_df$m_ratio ^ -0.5
 
@@ -151,7 +156,7 @@ summary_plot <- function(fine, coarse, var = "extinct", theory = TRUE) {
 }
 
 # Automate the data creation and visualisation workflow
-run_and_save <- function(name, args = list(), theory = TRUE, sims = TRUE) {
+run_and_save <- function(name, args = list(), theory = TRUE, sims = TRUE, pare = FALSE) {
   fine_sims <- fine
   # Run simulations
   if (theory) {
@@ -162,7 +167,7 @@ run_and_save <- function(name, args = list(), theory = TRUE, sims = TRUE) {
     coarse_sims <- do.call(run_sims, c(list(coarse, config_only = FALSE), args))
   }
   # Save the plot and data
-  p <- summary_plot(fine_sims, coarse_sims, theory = theory)
+  p <- summary_plot(fine_sims, coarse_sims, theory = theory, pare = pare)
   ggsave(p, filename = paste0(dir, name, ".pdf"), width = 20, height = 20)
   save(fine_sims, coarse_sims, file = paste0(dir, name, ".rdata"))
 }
@@ -175,7 +180,7 @@ fine <- create_grid(200)
 coarse <- create_grid(20)
 
 # Run the simulations and create graphs for each scenario
-run_and_save("basic")
+run_and_save("basic", pare = TRUE)
 run_and_save("in_res", args = list(zeta = 5, zeta_rand = TRUE))
 # run_and_save("kappa_high", args = list(c = 5, kappa = 3))
 run_and_save("kappa_low", args = list(kappa = 0.2))
