@@ -211,13 +211,13 @@ max_df <- sims %>%
 ggplot(max_df, aes(x = log2(kappa))) +
         geom_point(aes(y = log2(c_ratio)), size = 5) +
         labs(
-            x = "Log2 of kappa",
+            x = "Log2 of β",
             y = "Log2 odds of A-molecule:B-molecule",
             color = "log2 mutation rate ratio"
         ) +
         custom_theme
 
-ggsave(filename = paste0(dir, "kappa.pdf"), width = 10, height = 10)
+ggsave(filename = paste0(dir, "beta.pdf"), width = 10, height = 10)
 
 z_var <-   expand.grid(c_ratio = seq(1, 3, length.out = 30),
                 m_ratio = 2^-3,
