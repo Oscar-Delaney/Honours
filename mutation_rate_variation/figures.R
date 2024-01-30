@@ -197,7 +197,7 @@ run_and_save("costs", args = list(cost = 0.1))
 run_and_save("net_kappa", args = list(net = -0.1, kappa = 3))
 run_and_save("pk", args = list(gap = 12, d = 0.15, net = -0.2), theory = FALSE)
 
-kappa_var <-   expand.grid(c_ratio = 2 ^ seq(0, 4, length.out = 200), m_ratio = 0.5,
+kappa_var <-   expand.grid(c_ratio = 2 ^ seq(0, 4, length.out = 200), m_ratio = 2^-3,
               kappa = 2 ^ seq(-2, 2, length.out = 50), cidal_A = c(0), cidal_B = c(0))
 
 sims <- run_sims(kappa_var, config_only = TRUE, net = -0.1)
