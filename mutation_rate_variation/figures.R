@@ -151,8 +151,8 @@ summary_plot <- function(fine, coarse, var = "extinct", theory = TRUE, pare = FA
         labs(fill = "P(extinct)") +
         custom_theme +
         labs(
-            x = "Log2 odds of A-resistance:B-resistance",
-            y = "Log2 odds of A-molecule:B-molecule"
+            x = expression(log[2]~"A:B ratio of mutation rates"),
+            y = expression(log[2]~"A:B ratio of drug concentrations")
         ) +
         scale_fill_gradient(low = "white", high = "blue", limits = c(0, 1))
 
@@ -211,9 +211,9 @@ max_df <- sims %>%
 ggplot(max_df, aes(x = log2(kappa))) +
         geom_point(aes(y = log2(c_ratio)), size = 5) +
         labs(
-            x = "Log2 of β",
-            y = "Log2 odds of A-molecule:B-molecule",
-            color = "log2 mutation rate ratio"
+            x = expression(log[2]~of~beta),
+            y = expression(log[2]~"A:B ratio of drug concentrations"),
+            color = expression(log[2]~"mutation rate ratio")
         ) +
         custom_theme
 
@@ -238,8 +238,8 @@ ggplot(max_df, aes(x = log2(zeta))) +
         xlim(c(0, 4)) +
         ylim(c(0, 1.6)) +
         labs(
-            x = "Log2 zeta",
-            y = "Log2 odds of A-molecule:B-molecule"
+            x = expression(log[2]~zeta),
+            y = expression(log[2]~"A:B ratio of drug concentrations")
         ) +
         custom_theme
 
